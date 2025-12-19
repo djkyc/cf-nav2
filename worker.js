@@ -2452,8 +2452,13 @@ const HTML_CONTENT = `<!DOCTYPE html>
         });
 
         if(!res.ok){
+          let msg = "导入失败：数据格式不对或服务端错误";
+          try{
+            const j = await res.json();
+            if (j && j.message) msg = "导入失败：" + j.message;
+          }catch(_e){}
           hideLoading();
-          await customAlert("导入失败：数据格式不对或服务端错误", "导入");
+          await customAlert(msg, "导入");
           return;
         }
 
@@ -2463,7 +2468,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         logAction("导入数据");
       }catch(err){
         hideLoading();
-        await customAlert("导入失败：请确认文件是正确的 JSON 导出文件", "导入");
+        await customAlert("导入失败：" + (err && err.message ? err.message : "请确认文件是正确的 JSON 文件"), "导入");
       }
     });
 
@@ -2728,19 +2733,107 @@ export default {
       try {
         const body = await request.json();
         const userId = body.userId || "testUser";
-        const imported = body.data || body;
+        const importedRaw = body.data || body;
+
+        // 支持两种导入格式：
+        // 1) 本站导出格式：{ links: [...], categories: { ... } }
+        // 2) shuqian.json 格式：{ category: [...], sites: [...] }
+        function toStr(v){ return (typeof v === "string" ? v : "").trim(); }
+
+        function normalizeShuqianFormat(payload){
+          const catArr = Array.isArray(payload.category) ? payload.category.slice() : [];
+          const sitesArr = Array.isArray(payload.sites) ? payload.sites.slice() : [];
+
+          // 分类排序：sort_order -> id
+          catArr.sort(function(a,b){
+            const ao = (a && a.sort_order != null) ? a.sort_order : 0;
+            const bo = (b && b.sort_order != null) ? b.sort_order : 0;
+            if (ao !== bo) return ao - bo;
+            const ai = (a && a.id != null) ? a.id : 0;
+            const bi = (b && b.id != null) ? b.id : 0;
+            return ai - bi;
+          });
+
+          const idToName = new Map();
+          const categoriesObj = {};
+
+          for (let i=0;i<catArr.length;i++){
+            const c = catArr[i] || {};
+            const name = toStr(c.catelog || c.catalog || c.name);
+            if (!name) continue;
+            if (!categoriesObj[name]) categoriesObj[name] = [];
+            if (c.id != null) idToName.set(c.id, name);
+          }
+
+          if (Object.keys(categoriesObj).length === 0) {
+            categoriesObj["未分类"] = [];
+          }
+
+          // 站点排序：catelog_id -> sort_order -> id
+          sitesArr.sort(function(a,b){
+            const ac = (a && a.catelog_id != null) ? a.catelog_id : 0;
+            const bc = (b && b.catelog_id != null) ? b.catelog_id : 0;
+            if (ac !== bc) return ac - bc;
+            const ao = (a && a.sort_order != null) ? a.sort_order : 0;
+            const bo = (b && b.sort_order != null) ? b.sort_order : 0;
+            if (ao !== bo) return ao - bo;
+            const ai = (a && a.id != null) ? a.id : 0;
+            const bi = (b && b.id != null) ? b.id : 0;
+            return ai - bi;
+          });
+
+          const linksArr = [];
+
+          for (let i=0;i<sitesArr.length;i++){
+            const s = sitesArr[i] || {};
+            const name = toStr(s.name);
+            const url = toStr(s.url);
+            if (!name || !url) continue;
+
+            const icon = toStr(s.logo);
+            const tips = toStr(s.desc);
+
+            const catName = idToName.get(s.catelog_id) || "未分类";
+            if (!categoriesObj[catName]) categoriesObj[catName] = [];
+
+            const link = {
+              name: name,
+              url: url,
+              tips: tips,
+              icon: icon,
+              category: catName,
+              isPrivate: false
+            };
+
+            linksArr.push(link);
+            categoriesObj[catName].push(link);
+          }
+
+          return { links: linksArr, categories: categoriesObj };
+        }
+
+        let imported = importedRaw;
+
+        // 若是 shuqian.json 格式，先转换
+        if (!(Array.isArray(imported.links) && imported.categories && typeof imported.categories === "object")) {
+          if (Array.isArray(imported.category) && Array.isArray(imported.sites)) {
+            imported = normalizeShuqianFormat(imported);
+          }
+        }
 
         const links = Array.isArray(imported.links) ? imported.links : null;
         const categories = imported.categories && typeof imported.categories === "object" ? imported.categories : null;
 
         if (!links || !categories) {
           return new Response(
-            JSON.stringify({ success: false, message: "数据格式不正确：需要 links 数组 和 categories 对象" }),
+            JSON.stringify({
+              success: false,
+              message: "数据格式不正确：支持 {links,categories} 或 shuqian.json 的 {category,sites}"
+            }),
             { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } }
           );
         }
-
-        for (let i = 0; i < links.length; i++) {
+for (let i = 0; i < links.length; i++) {
           const it = links[i];
           if (!it || typeof it !== "object") {
             return new Response(JSON.stringify({ success: false, message: "links[" + i + "] 非对象" }), {
