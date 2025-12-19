@@ -293,13 +293,51 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
     /* ========= 管理按钮（右侧圆形） ========= */
     .add-remove-controls{
-      display:none;flex-direction:column;
-      position:fixed;right:20px;top:50%;
-      transform:translateY(-50%);
-      align-items:center;gap:15px;
+      display:none;
+      position:fixed;
+      right:20px;
+      top:180px; /* 避开顶部固定栏，确保第一个按钮完全可见 */
+      transform:none;
       z-index:900;
+      background:rgba(241,245,249,.95); /* 后台常用浅灰色调 */
+      border:1px solid rgba(148,163,184,.6);
+      border-radius:14px;
+      padding:12px;
+      box-shadow:0 8px 24px rgba(0,0,0,.12);
+      backdrop-filter:blur(6px);
+      flex-direction:column;
+      align-items:flex-start;
+      gap:10px;
+      max-height:calc(100vh - 220px);
+      overflow:auto;
     }
-    .round-btn{
+    body.dark-theme .add-remove-controls{
+      background:rgba(30,41,59,.92);
+      border-color:rgba(71,85,105,.65);
+      box-shadow:0 10px 28px rgba(0,0,0,.35);
+    }
+    .admin-panel-title{
+      font-size:13px;
+      font-weight:700;
+      color:#334155;
+      letter-spacing:.5px;
+      margin:2px 0 6px 2px;
+    }
+    body.dark-theme .admin-panel-title{ color:#cbd5e1; }
+    .admin-action{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .admin-label{
+      font-size:13px;
+      font-weight:600;
+      color:#1f2937;
+      white-space:nowrap;
+      line-height:1.2;
+    }
+    body.dark-theme .admin-label{ color:#e5e7eb; }
+.round-btn{
       background:var(--primary);
       color:#fff;border:none;border-radius:50%;
       width:40px;height:40px;
@@ -682,7 +720,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
       .card{ width:auto;max-width:100%;padding:12px;margin:0;border-radius:8px; }
       .card-title{ font-size:13px;max-width:100%; }
       .card-url{ font-size:11px;max-width:100%; }
-      .add-remove-controls{ right:5px;bottom:150px;top:auto;transform:none;gap:15px; }
+      .add-remove-controls{ right:10px;bottom:120px;top:auto;transform:none;gap:10px;padding:10px;max-height:calc(100vh - 260px); }
+      .admin-label{ font-size:12px;max-width:160px;white-space:normal; }
+      .admin-panel-title{ font-size:12px; }
       .round-btn{ width:36px;height:36px;font-size:20px; }
       .floating-button-group{ bottom:20px;right:10px; }
       .floating-button-group button{ width:36px;height:36px;font-size:18px; }
@@ -741,56 +781,74 @@ const HTML_CONTENT = `<!DOCTYPE html>
   <div class="content">
     <!-- 管理控制按钮 -->
     <div class="add-remove-controls">
-      <button class="round-btn add-btn" onclick="showAddDialog()" title="添加链接">
-        <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M16 6H8a2 2 0 0 0-2 2v8M16 42H8a2 2 0 0 1-2-2v-8M32 42h8a2 2 0 0 0 2-2v-8M32 6h8a2 2 0 0 1 2 2v8" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <path d="M32 24H16M24 16v16" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        </svg>
-      </button>
+      <div class="admin-panel-title">后台操作</div>
 
-      <button class="round-btn remove-btn" onclick="toggleRemoveMode()" title="编辑链接">
+      <div class="admin-action">
+        <button class="round-btn remove-btn" onclick="toggleRemoveMode()" title="编辑链接">
         <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
           <path d="M42 26v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h14" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
           <path d="M14 26.72V34h7.32L42 13.31 34.7 6 14 26.72Z" stroke="white" stroke-width="4" stroke-linejoin="round" fill="none"/>
         </svg>
       </button>
+        <span class="admin-label">1 编辑链接（开启/关闭编辑按钮）</span>
+      </div>
 
-      <button class="round-btn category-add-btn" onclick="addCategory()" title="添加分类">
+      <div class="admin-action">
+        <button class="round-btn add-btn" onclick="showAddDialog()" title="添加链接">
+        <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M16 6H8a2 2 0 0 0-2 2v8M16 42H8a2 2 0 0 1-2-2v-8M32 42h8a2 2 0 0 0 2-2v-8M32 6h8a2 2 0 0 1 2 2v8" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <path d="M32 24H16M24 16v16" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </button>
+        <span class="admin-label">2 添加链接</span>
+      </div>
+
+      <div class="admin-action">
+        <button class="round-btn category-add-btn" onclick="addCategory()" title="添加分类">
         <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
           <path d="M5 8c0-1.1.9-2 2-2h12l5 6h17c1.1 0 2 .9 2 2v26c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V8Z" stroke="white" stroke-width="4" stroke-linejoin="round" fill="none"/>
           <path d="M18 27h12M24 21v12" stroke="white" stroke-width="4" stroke-linecap="round"/>
         </svg>
       </button>
+        <span class="admin-label">3 添加分类</span>
+      </div>
 
-      <button class="round-btn category-manage-btn" onclick="toggleEditCategory()" title="编辑分类">
+      <div class="admin-action">
+        <button class="round-btn category-manage-btn" onclick="toggleEditCategory()" title="编辑分类">
         <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
           <path d="M5 8c0-1.1.9-2 2-2h12l5 6h17c1.1 0 2 .9 2 2v26c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V8Z" stroke="white" stroke-width="4" stroke-linejoin="round" fill="none"/>
           <circle cx="24" cy="28" r="4" stroke="white" stroke-width="4" fill="none"/>
           <path d="M24 21v3m0 8v3m4.8-12-2.1 2.1M20.8 31l-2.1 2.1M19 23l2.1 2.1M27 31l2.1 2.1M17 28h3M28 28h3" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
+        <span class="admin-label">4 分类管理（改名/删除/上下移动）</span>
+      </div>
 
-      <!-- 新增：导出/导入 -->
-      <button class="round-btn export-btn" onclick="exportData()" title="导出数据">
+      <div class="admin-action">
+        <button class="round-btn export-btn" onclick="exportData()" title="导出数据">
         <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
           <path d="M24 6v22" stroke="white" stroke-width="4" stroke-linecap="round"/>
           <path d="M16 20l8 8 8-8" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
           <path d="M10 38h28" stroke="white" stroke-width="4" stroke-linecap="round"/>
         </svg>
       </button>
+        <span class="admin-label">5 导出数据（备份 JSON）</span>
+      </div>
 
-      <button class="round-btn import-btn" onclick="triggerImport()" title="导入数据">
+      <div class="admin-action">
+        <button class="round-btn import-btn" onclick="triggerImport()" title="导入数据">
         <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
           <path d="M24 42V20" stroke="white" stroke-width="4" stroke-linecap="round"/>
           <path d="M16 28l8-8 8 8" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
           <path d="M10 10h28" stroke="white" stroke-width="4" stroke-linecap="round"/>
         </svg>
       </button>
+        <span class="admin-label">6 导入数据（覆盖恢复）</span>
+      </div>
 
       <input type="file" id="import-file" accept="application/json" style="display:none;" />
     </div>
-
-    <!-- 分类和卡片容器 -->
+<!-- 分类和卡片容器 -->
     <div id="sections-container"></div>
 
     <!-- 浮动按钮组 -->
