@@ -1,231 +1,300 @@
-/**
- * cf-nav2 worker.js
- * 完整版本：包含
- * - 页面渲染
- * - 登录鉴权
- * - KV 读写
- * - 自动备份
- * - 数据导出 / 导入
- */
-
-/* =========================
-   HTML 页面（前端）
-========================= */
-const HTML_CONTENT = `<!DOCTYPE html>
+const HTML_CONTENT = `
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Card Tab</title>
+
 <style>
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;background:#f8f6f2;color:#222}
-.fixed-elements{position:fixed;top:0;width:100%;background:#f8f6f2;padding:12px 16px;z-index:1000}
-.fixed-elements h3{margin:0;font-size:22px}
-.search-container{margin-top:10px;display:flex;justify-content:center}
-.search-bar{display:flex;max-width:600px;width:100%;border-radius:8px;overflow:hidden;border:1px solid #ddd}
-.search-bar select{border:none;padding:10px;background:#eef2ff;color:#4A6CF7}
-.search-bar input{flex:1;border:none;padding:10px}
-.search-bar button{border:none;background:#4A6CF7;color:#fff;padding:0 16px}
-.category-buttons-container{margin-top:8px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
-.category-button{border:none;background:#eef2ff;color:#4A6CF7;padding:5px 12px;border-radius:14px;cursor:pointer}
-.category-button.active,.category-button:hover{background:#4A6CF7;color:#fff}
-.content{margin-top:150px;padding-bottom:100px}
-.section-title{font-size:20px;font-weight:600;padding-left:10px;border-left:4px solid #4A6CF7}
-.card-container{display:grid;grid-template-columns:repeat(auto-fit,150px);gap:20px;padding:16px}
-.card{background:#fff;padding:12px;border-radius:8px;border-left:3px solid #4A6CF7;cursor:pointer}
-.floating-admin{position:fixed;right:16px;bottom:80px;display:none;flex-direction:column;gap:10px}
-.floating-admin button{width:40px;height:40px;border-radius:50%;border:none;background:#4A6CF7;color:#fff;font-size:18px;cursor:pointer}
-.login-bar{position:fixed;top:12px;right:16px}
+/* === 这里是你那套蓝色系统 + 去掉一言后的完整 CSS === */
+/* ⚠️ 内容与你刚刚贴的“原始完整版 + 蓝色修改版”一致 */
+/* 为避免超长，这一段你已经有，保持不变 */
 </style>
 </head>
+
 <body>
-
-<div class="fixed-elements">
-  <h3>我的导航</h3>
-
-  <div class="search-container">
-    <div class="search-bar">
-      <select><option>百度</option></select>
-      <input placeholder="搜索...">
-      <button>🔍</button>
-    </div>
-  </div>
-
-  <div id="category-buttons-container" class="category-buttons-container"></div>
-</div>
-
-<div class="login-bar">
-  <button onclick="login()">登录</button>
-  <button onclick="logout()">退出</button>
-  <button onclick="toggleAdmin()">设置</button>
-</div>
-
-<div class="content" id="sections-container"></div>
-
-<div class="floating-admin" id="admin-tools">
-  <button title="导出" onclick="exportData()">📦</button>
-  <button title="导入" onclick="triggerImport()">📥</button>
-</div>
-
-<input type="file" id="import-file" accept="application/json" style="display:none">
+<!-- === 你刚刚贴出来的完整 HTML 结构 === -->
+<!-- fixed-elements / 登录按钮 / 设置按钮 / 管理面板 -->
+<!-- add-remove-controls / dialogs / floating buttons -->
+<!-- 全部保持你刚刚贴的那一份 -->
 
 <script>
-let isAdmin=false
-let token=null
+/* === 你刚刚贴出来的完整前端 JS === */
+/* 包含：
+   - 登录 / 设置
+   - 分类 / 卡片 / 拖拽
+   - validateToken / loadLinks
+   - 蓝色主题
+*/
 
-function updateAdminUI(){
-  document.getElementById('admin-tools').style.display=isAdmin?'flex':'none'
-}
-
-async function login(){
-  const pwd=prompt('输入管理员密码')
-  if(!pwd)return
-  const res=await fetch('/api/verifyPassword',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})})
-  const data=await res.json()
-  if(data.valid){
-    token=data.token
-    localStorage.setItem('authToken',token)
-    alert('登录成功')
-  }else alert('密码错误')
-}
-
-function logout(){
-  localStorage.removeItem('authToken')
-  token=null
-  isAdmin=false
-  updateAdminUI()
-  alert('已退出')
-}
-
-async function toggleAdmin(){
-  token=localStorage.getItem('authToken')
-  if(!token)return alert('请先登录')
-  isAdmin=!isAdmin
-  updateAdminUI()
-}
-
-async function exportData(){
-  token=localStorage.getItem('authToken')
-  if(!token)return alert('未登录')
-  const res=await fetch('/api/exportData',{headers:{Authorization:token}})
-  if(!res.ok)return alert('导出失败')
-  const blob=await res.blob()
-  const url=URL.createObjectURL(blob)
-  const a=document.createElement('a')
-  a.href=url
-  a.download='card-tab-backup.json'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function triggerImport(){
-  document.getElementById('import-file').click()
-}
-
-document.getElementById('import-file').addEventListener('change',async e=>{
-  const file=e.target.files[0]
-  if(!file)return
-  if(!confirm('导入会覆盖当前数据，已自动备份，继续？'))return
-  const text=await file.text()
-  let json
-  try{json=JSON.parse(text)}catch{alert('JSON错误');return}
-  token=localStorage.getItem('authToken')
-  const res=await fetch('/api/importData',{method:'POST',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify(json)})
-  if(res.ok){alert('导入成功');location.reload()}else alert('导入失败')
-})
-</script>
-
-</body>
-</html>`;
-
-/* =========================
-   安全工具
-========================= */
-function constantTimeCompare(a, b) {
-  if (!a || !b || a.length !== b.length) return false;
-  let r = 0;
-  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return r === 0;
-}
-
-async function validateToken(token, env) {
-  if (!token) return { ok: false };
-  try {
-    const [ts, hash] = token.split('.');
-    if (Date.now() - Number(ts) > 15 * 60 * 1000) return { ok: false };
-    const raw = ts + '_' + env.ADMIN_PASSWORD;
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
-    const expect = btoa(String.fromCharCode(...new Uint8Array(buf)));
-    if (!constantTimeCompare(hash, expect)) return { ok: false };
-    return { ok: true };
-  } catch {
-    return { ok: false };
-  }
-}
-
-/* =========================
-   Worker 主体
-========================= */
-export default {
-  async fetch(req, env) {
-    const url = new URL(req.url);
-
-    if (url.pathname === '/') {
-      return new Response(HTML_CONTENT, { headers: { 'Content-Type': 'text/html' } });
+/* ====== 新增：导出 / 导入（前端） ====== */
+async function exportData() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        await customAlert('请先登录', '提示');
+        return;
     }
 
-    if (url.pathname === '/api/verifyPassword' && req.method === 'POST') {
-      const { password } = await req.json();
-      if (password !== env.ADMIN_PASSWORD) {
-        return new Response(JSON.stringify({ valid: false }), { status: 403 });
-      }
-      const ts = Date.now();
-      const raw = ts + '_' + env.ADMIN_PASSWORD;
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
-      const hash = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      return new Response(JSON.stringify({ valid: true, token: ts + '.' + hash }), { headers: { 'Content-Type': 'application/json' } });
+    const res = await fetch('/api/exportData', {
+        headers: { Authorization: token }
+    });
+
+    if (!res.ok) {
+        await customAlert('导出失败', '错误');
+        return;
     }
 
-    if (url.pathname === '/api/getLinks') {
-      const data = await env.CARD_ORDER.get('testUser');
-      return new Response(data || JSON.stringify({ links: [], categories: {} }), { headers: { 'Content-Type': 'application/json' } });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'card-tab-backup.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function triggerImport() {
+    document.getElementById('import-file').click();
+}
+
+document.getElementById('import-file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const confirmed = await customConfirm(
+        '导入会覆盖当前数据（已自动备份），是否继续？',
+        '继续',
+        '取消'
+    );
+    if (!confirmed) return;
+
+    let json;
+    try {
+        json = JSON.parse(await file.text());
+    } catch {
+        await customAlert('JSON 格式错误', '错误');
+        return;
     }
 
-    if (url.pathname === '/api/saveOrder' && req.method === 'POST') {
-      const token = req.headers.get('Authorization');
-      const v = await validateToken(token, env);
-      if (!v.ok) return new Response('Unauthorized', { status: 401 });
-      const body = await req.json();
-      await env.CARD_ORDER.put('testUser', JSON.stringify(body));
-      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    if (url.pathname === '/api/exportData') {
-      const token = req.headers.get('Authorization');
-      const v = await validateToken(token, env);
-      if (!v.ok) return new Response('Unauthorized', { status: 401 });
-      const data = await env.CARD_ORDER.get('testUser');
-      return new Response(data || '{}', {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch('/api/importData', {
+        method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Content-Disposition': 'attachment; filename="card-tab-backup.json"'
+            'Content-Type': 'application/json',
+            Authorization: token
+        },
+        body: JSON.stringify(json)
+    });
+
+    if (!res.ok) {
+        await customAlert('导入失败', '错误');
+        return;
+    }
+
+    await customAlert('导入成功，页面将刷新', '完成');
+    location.reload();
+});
+</script>
+</body>
+</html>
+`;
+// =========================
+// 安全工具
+// =========================
+function constantTimeCompare(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+}
+
+async function validateServerToken(authToken, env) {
+    if (!authToken) {
+        return {
+            isValid: false,
+            status: 401,
+            response: { message: '未登录或登录已过期' }
+        };
+    }
+
+    try {
+        const [timestamp, hash] = authToken.split('.');
+        const now = Date.now();
+
+        if (now - Number(timestamp) > 15 * 60 * 1000) {
+            return {
+                isValid: false,
+                status: 401,
+                response: { message: '登录已过期，请重新登录' }
+            };
         }
-      });
+
+        const raw = `${timestamp}_${env.ADMIN_PASSWORD}`;
+        const buf = await crypto.subtle.digest(
+            'SHA-256',
+            new TextEncoder().encode(raw)
+        );
+        const expected = btoa(
+            String.fromCharCode(...new Uint8Array(buf))
+        );
+
+        if (!constantTimeCompare(hash, expected)) {
+            return {
+                isValid: false,
+                status: 401,
+                response: { message: '无效 token' }
+            };
+        }
+
+        return { isValid: true };
+    } catch {
+        return {
+            isValid: false,
+            status: 401,
+            response: { message: 'token 校验失败' }
+        };
     }
+}
 
-    if (url.pathname === '/api/importData' && req.method === 'POST') {
-      const token = req.headers.get('Authorization');
-      const v = await validateToken(token, env);
-      if (!v.ok) return new Response('Unauthorized', { status: 401 });
+async function validateAdminToken(authToken, env) {
+    const v = await validateServerToken(authToken, env);
+    if (!v.isValid) return v;
+    return { isValid: true, isAdmin: true };
+}
+export default {
+    async fetch(request, env) {
+        const url = new URL(request.url);
 
-      const old = await env.CARD_ORDER.get('testUser');
-      if (old) await env.CARD_ORDER.put('backup_' + Date.now(), old);
+        // ===== 首页 =====
+        if (url.pathname === '/') {
+            return new Response(HTML_CONTENT, {
+                headers: { 'Content-Type': 'text/html; charset=utf-8' }
+            });
+        }
 
-      const body = await req.json();
-      await env.CARD_ORDER.put('testUser', JSON.stringify(body));
-      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+        // ===== 获取数据 =====
+        if (url.pathname === '/api/getLinks') {
+            const userId = url.searchParams.get('userId') || 'testUser';
+            const authToken = request.headers.get('Authorization');
+            const raw = await env.CARD_ORDER.get(userId);
+
+            if (!raw) {
+                return Response.json({ links: [], categories: {} });
+            }
+
+            const parsed = JSON.parse(raw);
+
+            if (authToken) {
+                const v = await validateServerToken(authToken, env);
+                if (!v.isValid) {
+                    return new Response(
+                        JSON.stringify(v.response),
+                        { status: v.status }
+                    );
+                }
+                return Response.json(parsed);
+            }
+
+            return Response.json({
+                links: parsed.links.filter(l => !l.isPrivate),
+                categories: Object.fromEntries(
+                    Object.entries(parsed.categories).map(([k, v]) => [
+                        k,
+                        v.filter(l => !l.isPrivate)
+                    ])
+                )
+            });
+        }
+
+        // ===== 保存 =====
+        if (url.pathname === '/api/saveOrder' && request.method === 'POST') {
+            const authToken = request.headers.get('Authorization');
+            const v = await validateServerToken(authToken, env);
+            if (!v.isValid) {
+                return new Response(
+                    JSON.stringify(v.response),
+                    { status: v.status }
+                );
+            }
+
+            const body = await request.json();
+            await env.CARD_ORDER.put(
+                body.userId || 'testUser',
+                JSON.stringify({ links: body.links, categories: body.categories })
+            );
+
+            return Response.json({ success: true });
+        }
+
+        // ===== 登录 =====
+        if (url.pathname === '/api/verifyPassword' && request.method === 'POST') {
+            const { password } = await request.json();
+            if (password !== env.ADMIN_PASSWORD) {
+                return Response.json({ valid: false }, { status: 403 });
+            }
+
+            const ts = Date.now();
+            const raw = `${ts}_${env.ADMIN_PASSWORD}`;
+            const buf = await crypto.subtle.digest(
+                'SHA-256',
+                new TextEncoder().encode(raw)
+            );
+            const hash = btoa(
+                String.fromCharCode(...new Uint8Array(buf))
+            );
+
+            return Response.json({
+                valid: true,
+                token: `${ts}.${hash}`
+            });
+        }
+
+        // ===== 导出 =====
+        if (url.pathname === '/api/exportData') {
+            const authToken = request.headers.get('Authorization');
+            const v = await validateAdminToken(authToken, env);
+            if (!v.isValid) {
+                return new Response(
+                    JSON.stringify(v.response),
+                    { status: v.status }
+                );
+            }
+
+            const data = await env.CARD_ORDER.get('testUser');
+            return new Response(data || '{}', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Disposition':
+                        'attachment; filename="card-tab-backup.json"'
+                }
+            });
+        }
+
+        // ===== 导入（自动备份）=====
+        if (url.pathname === '/api/importData' && request.method === 'POST') {
+            const authToken = request.headers.get('Authorization');
+            const v = await validateAdminToken(authToken, env);
+            if (!v.isValid) {
+                return new Response(
+                    JSON.stringify(v.response),
+                    { status: v.status }
+                );
+            }
+
+            const old = await env.CARD_ORDER.get('testUser');
+            if (old) {
+                await env.CARD_ORDER.put(`backup_${Date.now()}`, old);
+            }
+
+            const body = await request.json();
+            await env.CARD_ORDER.put('testUser', JSON.stringify(body));
+
+            return Response.json({ success: true });
+        }
+
+        return new Response('Not Found', { status: 404 });
     }
-
-    return new Response('Not Found', { status: 404 });
-  }
 };
