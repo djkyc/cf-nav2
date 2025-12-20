@@ -407,6 +407,21 @@ const HTML_CONTENT = `<!DOCTYPE html>
     .export-btn{ order:5; }
     .import-btn{ order:6; }
 
+    
+    .ai-btn{
+      background:var(--primary);
+      color:#fff;
+      border:none;
+      border-radius:6px;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .ai-btn:hover{
+      background:var(--primary-hover);
+    }
+
     /* ========= 分类区 & 卡片 ========= */
     .section{ margin-bottom:25px;padding:0 15px; }
     .section-title-container{
@@ -943,7 +958,12 @@ const HTML_CONTENT = `<!DOCTYPE html>
         <label for="url-input">地址</label>
         <input type="text" id="url-input" placeholder="必填" />
         <label for="tips-input">描述</label>
-        <input type="text" id="tips-input" placeholder="可选" />
+        
+<div style="display:flex;gap:6px;align-items:center;">
+  <input type="text" id="tips-input" placeholder="可选" style="flex:1;" />
+  <button type="button" id="ai-generate-btn" class="ai-btn">AI</button>
+</div>
+
         <label for="icon-input">图标</label>
         <input type="text" id="icon-input" placeholder="可选" />
         <label for="category-select">选择分类</label>
@@ -2621,6 +2641,32 @@ document.getElementById("url-input")?.addEventListener("blur", async function(){
   const tipsInput = document.getElementById("tips-input");
   if(tipsInput && !tipsInput.value){
     tipsInput.value = await fetchSiteDescription(url);
+  }
+});
+
+
+/* ===== AI 自动生成名称 / 描述 / 图标 ===== */
+document.getElementById("ai-generate-btn")?.addEventListener("click", async ()=>{
+  const url = document.getElementById("url-input")?.value;
+  if(!url){
+    alert("请先输入网址");
+    return;
+  }
+  try{
+    const res = await fetch("/api/aiGenerate?url="+encodeURIComponent(url));
+    const data = await res.json();
+
+    if(data.name && document.getElementById("name-input")){
+      document.getElementById("name-input").value = data.name;
+    }
+    if(data.description && document.getElementById("tips-input")){
+      document.getElementById("tips-input").value = data.description;
+    }
+    if(data.icon && document.getElementById("icon-input")){
+      document.getElementById("icon-input").value = data.icon;
+    }
+  }catch(e){
+    console.error("AI 生成失败");
   }
 });
 
