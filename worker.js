@@ -14,60 +14,79 @@ const HTML_CONTENT = `<!DOCTYPE html>
   <style>
     /* ========= 全局 ========= */
     :root{
-      --primary:#000;
-      --primary-hover:#000;
-      --primary-soft:rgba(0,0,0,.2);
-      --danger:#000;
-      --danger-hover:#000;
+      --primary:#3b82f6;
+      --primary-hover:#2563eb;
+      --primary-soft:rgba(59,130,246,.18);
+      --danger:#ef4444;
+      --danger-hover:#dc2626;
 
-      --bg:#ffffff;
-      --text:#000000;
-      --muted:#333333;
+      /* Light */
+      --bg:#f5f6f8;
+      --text:#111827;
+      --muted:#6b7280;
+      --surface:#ffffff;
 
-      --dark-bg:#000000;
-      --dark-card:#000000;
-      --dark-surface:#000000;
-      --dark-border:#ffffff;
-      --dark-text:#ffffff;
-      --dark-muted:#cccccc;
+      --card-bg:#ffffff;
+      --card-border:#e6e8ee;
+      --card-shadow:0 8px 24px rgba(17,24,39,.06);
+      --card-accent:#111111;
 
-      --dark-primary:#ffffff;
-      --dark-primary-hover:#ffffff;
-    }
-/* ========= 高对比 · 无动画 ========= */
-    *,
-    *::before,
-    *::after{
-      animation:none !important;
-      transition:none !important;
-      scroll-behavior:auto !important;
+      --input-border:#e6e8ee;
+
+      /* Dark */
+      --dark-bg:radial-gradient(1200px 700px at 50% 0%, rgba(255,255,255,.12), rgba(17,17,17,1) 55%, rgba(12,12,12,1) 100%);
+      --dark-card:rgba(26,29,35,.78);
+      --dark-text:#f5f7ff;
+      --dark-muted:rgba(255,255,255,.62);
+      --dark-border:rgba(255,255,255,.10);
+      --dark-primary:#60a5fa;
+      --dark-primary-hover:#3b82f6;
     }
 
     body{
       font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Oxygen,Ubuntu,Cantarell,'Open Sans','Helvetica Neue',sans-serif;
-      margin:0;padding:0;
-      background-color:var(--bg);
+      margin:0;
+      padding:0;
+      background:var(--bg);
       color:var(--text);
-      transition:all .3s ease;
+      transition:background .25s ease,color .25s ease;
+      min-height:100vh;
     }
     body.dark-theme{
-      background-color:var(--dark-bg);
+      background:var(--dark-bg);
       color:var(--dark-text);
+
+      /* token overrides */
+      --muted:var(--dark-muted);
+      --surface:rgba(20,22,28,.75);
+
+      --card-bg:var(--dark-card);
+      --card-border:var(--dark-border);
+      --card-shadow:0 10px 26px rgba(0,0,0,.45);
+      --card-accent:#ffffff;
+
+      --input-border:var(--dark-border);
     }
 
     /* ========= 顶部固定区 ========= */
     .fixed-elements{
-      position:fixed;top:0;left:0;right:0;
-      background-color:var(--bg);
+      position:fixed;
+      top:0;
+      left:0;
+      right:0;
       z-index:1000;
-      padding:10px;
-      height:150px;
-      box-shadow:none;
-      transition:all .3s ease;
+      padding:18px 18px 14px;
+      background:rgba(245,246,248,.70);
+      backdrop-filter:blur(10px);
+      border-bottom:1px solid rgba(17,24,39,.06);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:12px;
     }
     body.dark-theme .fixed-elements{
-      background-color:var(--dark-bg);
-      box-shadow:none;
+      background:rgba(15,17,21,.55);
+      border-bottom:1px solid rgba(255,255,255,.08);
     }
     .fixed-elements h3{
       position:absolute;top:10px;left:20px;
@@ -79,20 +98,91 @@ const HTML_CONTENT = `<!DOCTYPE html>
     body.dark-theme .fixed-elements h3{ color:var(--dark-text); }
 
     .center-content{
-      position:absolute;top:50%;left:50%;
-      transform:translate(-50%,-50%);
       width:100%;
-      text-align:center;
-      padding:0 10px;
+      max-width:980px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:10px;
     }
 
     /* ========= 右上角控制 ========= */
     .top-right-controls{
-      position:fixed;top:10px;right:10px;
-      display:flex;align-items:center;gap:10px;
-      z-index:1001;
+      position:fixed;
+      top:18px;
+      right:18px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      z-index:2000;
     }
-    .admin-btn,.login-btn{
+    
+    .brand{
+      font-size:34px;
+      font-weight:900;
+      letter-spacing:.5px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      margin-top:6px;
+      user-select:none;
+    }
+    .brand-badge{
+      width:30px;
+      height:30px;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(59,130,246,.12);
+      border:1px solid rgba(59,130,246,.25);
+      font-size:18px;
+      line-height:1;
+      transform:translateY(1px);
+    }
+    body.dark-theme .brand-badge{
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.14);
+    }
+
+    .datetime-display{
+      font-size:13px;
+      color:var(--muted);
+      margin-top:2px;
+      text-align:center;
+      min-height:18px;
+      user-select:none;
+    }
+    body.dark-theme .datetime-display{
+      color:var(--dark-muted);
+    }
+
+    .theme-toggle{
+      width:36px;
+      height:36px;
+      border-radius:999px;
+      border:1px solid rgba(17,24,39,.14);
+      background:var(--surface);
+      color:var(--text);
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 6px 18px rgba(17,24,39,.10);
+      transition:transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
+    }
+    .theme-toggle:hover{
+      transform:translateY(-1px);
+      box-shadow:0 10px 24px rgba(17,24,39,.14);
+    }
+    body.dark-theme .theme-toggle{
+      background:rgba(0,0,0,.22);
+      color:var(--dark-text);
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:0 10px 26px rgba(0,0,0,.55);
+    }
+
+.admin-btn,.login-btn{
       background-color:var(--primary);
       color:#fff;border:none;border-radius:4px;
       padding:8px 16px;font-size:13px;
@@ -204,58 +294,92 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
     /* ========= 主体内容 ========= */
     .content{
-      margin-top:170px;padding:10px;
-      max-width:1600px;margin-left:auto;margin-right:auto;
-      transition:opacity .3s ease;
+      margin-top:210px;
+      padding:0 20px 20px;
+      max-width:1200px;
+      margin-left:auto;
+      margin-right:auto;
     }
     .loading .content{ opacity:.6; }
 
     /* ========= 搜索栏 ========= */
-    .search-container{ margin-top:10px;display:flex;flex-direction:column;align-items:center;width:100%; }
+    .search-container{
+      width:100%;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      margin-top:0;
+      gap:10px;
+    }
     .search-bar{
-      display:flex;justify-content:center;
-      margin-bottom:10px;width:100%;max-width:600px;
-      margin-left:auto;margin-right:auto;
-      border-radius:8px;overflow:hidden;
-      box-shadow:0 2px 8px rgba(0,0,0,.05);
-      border:1px solid #e0e0e0;
-      transition:all .3s ease;
+      width:100%;
+      max-width:620px;
+      display:flex;
+      align-items:center;
+      background:var(--surface);
+      border:1px solid var(--input-border);
+      border-radius:12px;
+      overflow:hidden;
+      box-shadow:0 10px 26px rgba(17,24,39,.06);
     }
     .search-bar:focus-within{ box-shadow:0 3px 12px rgba(0,0,0,.1);border-color:var(--primary); }
     .search-bar select{
-      border:none;background:#f4f7fa;
-      padding:10px 15px;font-size:14px;
-      color:var(--primary);width:120px;outline:none;
-      appearance:none;
-      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6" viewBox="0 0 12 6"><path fill="%233b82f6" d="M0 0l6 6 6-6z"/></svg>');
-      background-repeat:no-repeat;
-      background-position:right 10px center;
-      cursor:pointer;transition:all .3s ease;
-      border-radius:0;
+      padding:12px 14px;
+      border:none;
+      border-right:1px solid rgba(17,24,39,.10);
+      background:transparent;
+      outline:none;
+      font-size:14px;
+      color:var(--primary-hover);
+      cursor:pointer;
+      min-width:110px;
     }
     select option{
       background:#fff;color:#333;padding:10px;font-size:14px;
       white-space:nowrap;overflow:visible;
     }
     .search-bar input{
-      flex:1;border:none;padding:10px 15px;font-size:14px;
-      background:#fff;outline:none;
+      flex-grow:1;
+      padding:12px 14px;
+      border:none;
+      outline:none;
+      font-size:14px;
+      background:transparent;
+      color:var(--text);
     }
     .search-bar button{
-      border:none;background:var(--primary);
-      color:#fff;padding:0 20px;cursor:pointer;
-      transition:background-color .3s;
+      padding:0 16px;
+      border:none;
+      background:transparent;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:44px;
+      color:var(--text);
+      transition:background .2s ease;
+    }
+    .search-bar button:hover{
+      background:rgba(17,24,39,.06);
     }
     .search-bar button:hover{ background:var(--primary-hover); }
 
-    body.dark-theme .search-bar{ border-color:#323642;background:#1e2128; }
-    body.dark-theme .search-bar select{
-      background-color:var(--dark-surface);
-      color:var(--dark-primary);
-      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6" viewBox="0 0 12 6"><path fill="%235d7fb9" d="M0 0l6 6 6-6z"/></svg>');
+    body.dark-theme .search-bar{
+      background:rgba(0,0,0,.22);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:0 18px 40px rgba(0,0,0,.55);
     }
-    body.dark-theme .search-bar input{ background-color:var(--dark-surface);color:var(--dark-text); }
-    body.dark-theme .search-bar button{ background-color:var(--dark-primary); }
+    body.dark-theme .search-bar select{
+      border-right:1px solid rgba(255,255,255,.10);
+      color:var(--dark-text);
+    }
+    body.dark-theme .search-bar input{
+      color:var(--dark-text);
+    }
+    body.dark-theme .search-bar button{
+      background:transparent;
+      color:var(--dark-text);
+    }
     body.dark-theme select option{ background-color:var(--dark-surface);color:var(--dark-text); }
 
     /* ========= 分类快捷按钮 ========= */
@@ -374,16 +498,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
     /* ========= 分类区 & 卡片 ========= */
     .section{ margin-bottom:25px;padding:0 15px; }
-    .section-title-container{
-      display:flex;align-items:center;
-      margin-bottom:18px;
-      border-bottom:1px solid #e0e0e0;
-      padding-bottom:10px;
-      width:100%;max-width:1520px;
-      margin-left:auto;margin-right:auto;
-      transition:border-color .3s ease;
-    }
-    body.dark-theme .section-title-container{ border-bottom-color:var(--dark-border); }
+    .section-title-container{display:flex;align-items:center;margin:26px 0 14px;border-bottom:1px solid rgba(17,24,39,.08);padding-bottom:10px;}
+    body.dark-theme .section-title-container{border-bottom:1px solid rgba(255,255,255,.10);}
     .section-title{
       font-size:22px;font-weight:600;
       color:var(--text);
@@ -411,38 +527,39 @@ const HTML_CONTENT = `<!DOCTYPE html>
       margin:0 auto;max-width:1600px;
     }
     .card{
-      background:#fff;border-radius:8px;
-      padding:12px;width:150px;
-      box-shadow:0 3px 10px rgba(0,0,0,.06);
-      cursor:pointer;transition:all .3s ease;
-      position:relative;user-select:none;
-      border-left:3px solid var(--primary);
-      animation:fadeIn .3s ease forwards;
-      animation-delay:calc(var(--card-index) * .05s);
-      opacity:0;margin:2px;
+      background:var(--card-bg);
+      border-radius:10px;
+      padding:14px 14px 12px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      cursor:pointer;
+      transition:transform .15s ease, box-shadow .2s ease;
+      position:relative;
+      border:1px solid var(--card-border);
+      box-shadow:var(--card-shadow);
+      border-left:4px solid var(--card-accent);
+      gap:6px;
+      min-height:70px;
     }
     body.dark-theme .card{
-      background:var(--dark-card);
-      border-left-color:var(--dark-primary);
-      box-shadow:0 4px 12px rgba(0,0,0,.2);
+      background:var(--card-bg);
+      border:1px solid var(--card-border);
+      box-shadow:var(--card-shadow);
+      border-left:4px solid var(--card-accent);
     }
     @keyframes fadeIn{ from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
-    .card:hover{ transform:translateY(-5px);box-shadow:0 8px 15px rgba(0,0,0,.08); }
+    .card:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(17,24,39,.10);}
 
     .card-top{ display:flex;align-items:center;margin-bottom:5px; }
     .card-icon{ width:16px;height:16px;margin-right:5px; }
-    .card-title{
-      font-size:15px;font-weight:600;
-      color:var(--text);
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-      transition:color .3s ease;
-    }
+    .card-title{font-size:15px;font-weight:700;margin:0;color:var(--text);display:flex;align-items:center;gap:8px;}
     .card-url{
       font-size:12px;color:var(--muted);
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       transition:color .3s ease;
     }
-    body.dark-theme .card-title{ color:var(--dark-text); }
+    body.dark-theme .card-title{color:var(--dark-text);}
     body.dark-theme .card-url{ color:var(--dark-muted); }
 
     .private-tag{
@@ -743,7 +860,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
 </head>
 <body>
   <div class="fixed-elements">
-    <h3>我的导航</h3>
+    <div class="brand">XG<span class="brand-badge">🧭</span>导航</div>
 
     <div class="center-content">
       <!-- 搜索栏 -->
@@ -759,7 +876,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
           <button id="search-button">🔍</button>
         </div>
       </div>
-
+      <div id="datetime-display" class="datetime-display"></div>
       <div id="category-buttons-container" class="category-buttons-container"></div>
     </div>
 
@@ -783,7 +900,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         </svg>
         <div class="bookmark-search-dropdown" id="bookmark-search-dropdown">
           <input type="text" id="bookmark-search-input" placeholder="搜索书签..." />
-        </div>
+</div>
       </div>
     </div>
   </div>
@@ -2080,7 +2197,20 @@ const HTML_CONTENT = `<!DOCTYPE html>
       isDarkTheme = !isDarkTheme;
       if(isDarkTheme) document.body.classList.add("dark-theme");
       else document.body.classList.remove("dark-theme");
-      logAction("切换主题", { isDarkTheme: isDarkTheme });
+      logAction("切换主题", { isDarkTheme: isDarkTheme }
+    function updateDateTime(){
+      const el = document.getElementById('datetime-display');
+      if(!el) return;
+      const now = new Date();
+      const fmt = new Intl.DateTimeFormat('zh-CN',{
+        year:'numeric',month:'2-digit',day:'2-digit',
+        weekday:'long',hour:'2-digit',minute:'2-digit',second:'2-digit',
+        hour12:false
+      });
+      el.textContent = fmt.format(now).replaceAll('/','-');
+    }
+
+);
     }
 
     function scrollToTop(){
