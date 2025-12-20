@@ -807,7 +807,18 @@ const HTML_CONTENT = `<!DOCTYPE html>
       #dialog-box{ width:90%;max-width:350px;padding:20px; }
       .section-title{ font-size:20px;min-width:100px; }
     }
-  </style>
+  
+/* ===== 后台操作面板修正（固定不随页面滚动） ===== */
+.add-remove-controls{
+  position: fixed !important;
+  right: 20px;
+  top: 200px;
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+  z-index: 2000;
+}
+
+</style>
 </head>
 <body>
   <div class="fixed-elements">
