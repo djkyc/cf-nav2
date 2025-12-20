@@ -5,8 +5,9 @@ https://deploy.workers.cloudflare.com/?url=https://github.com/djkyc/cf-nav
 )
 
 ## * ☁️ Cloudflare 需要加的环境变量（只多 1 个）
+```
   AI_API_KEY = sk-xxxxxxxx
-
+```
 
 不加也能用（只是不走 OpenAI 兜底）
 
