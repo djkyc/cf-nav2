@@ -2,6 +2,8 @@
 // KV Binding name MUST be: CARD_ORDER
 // Env var required: ADMIN_PASSWORD
 
+import { SEED_DATA, SEED_USER_ID } from "./db.js";
+
 const HTML_CONTENT = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -2489,6 +2491,23 @@ const HTML_CONTENT = `<!DOCTYPE html>
 </html>
 `;
 
+/* =================== Seed Data (optional) =================== */
+let __seedEnsured = false;
+async function ensureSeed(env) {
+  if (__seedEnsured) return;
+  try {
+    const existing = await env.CARD_ORDER.get(SEED_USER_ID);
+    if (!existing) {
+      await env.CARD_ORDER.put(SEED_USER_ID, JSON.stringify(SEED_DATA));
+    }
+  } catch (e) {
+    // Ignore seed init errors to avoid blocking the site
+  } finally {
+    __seedEnsured = true;
+  }
+}
+
+
 /* =================== Security Helpers (Worker) =================== */
 
 // Constant-time comparison to mitigate timing attacks
@@ -2568,6 +2587,7 @@ async function validateAdminToken(authToken, env) {
 
 export default {
   async fetch(request, env) {
+    await ensureSeed(env);
     const url = new URL(request.url);
 
     // Home page
