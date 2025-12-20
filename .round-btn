@@ -1,33 +1,90 @@
-// Card Tab - Cloudflare Worker (KV-backed) - Blue Theme + Import/Export
+// Nav-CF - Cloudflare Worker (KV-backed) - Blue Theme + Import/Export
 // KV Binding name MUST be: CARD_ORDER
 // Env var required: ADMIN_PASSWORD
+
+import { SEED_DATA, SEED_USER_ID } from "./db.js";
 
 const HTML_CONTENT = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Card Tab</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>⭐</text></svg>">
+  <title>Nav-CF</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect x=%2215%22 y=%2220%22 width=%2255%22 height=%2210%22 rx=%225%22 fill=%22black%22/><rect x=%2225%22 y=%2240%22 width=%2255%22 height=%2210%22 rx=%225%22 fill=%22black%22/><rect x=%2235%22 y=%2260%22 width=%2255%22 height=%2210%22 rx=%225%22 fill=%22black%22/></svg>"><text y=%22.9em%22 font-size=%2280%22>⭐</text></svg>">
   <style>
-/* ===== 黑白按钮主题（白色模式） ===== */
---btn-bg:#111111;
---btn-bg-hover:#000000;
---btn-text:#ffffff;
+    /* ========= 全局 ========= */
+    :root{
+      /* Light mode: 黑色主色 */
+      --primary:#111111;
+      --primary-hover:#000000;
+      --primary-soft:rgba(0,0,0,.15);
+      --danger:#e74c3c;
+      --danger-hover:#c0392b;
 
---btn-gradient:linear-gradient(
-  180deg,
-  #2b2b2b 0%,
-  #111111 100%
-);
+      --bg:rgb(250,250,250);
+      --text:#222;
+      --muted:#888;
 
---btn-shadow:
-  0 4px 10px rgba(0,0,0,.25),
-  inset 0 1px 0 rgba(255,255,255,.15);
+      --dark-bg:#121418;
+      --dark-card:#1e2128;
+      --dark-surface:#252830;
+      --dark-border:#2a2e38;
+      --dark-text:#e3e3e3;
+      --dark-muted:#a0a0a0;
 
-/* 卡片左侧强调边 */
---accent-border:#111111;
+      --dark-primary:#5d7fb9;
+      --dark-primary-hover:#4a6fa5;
+    }
 
+    @media (prefers-color-scheme: dark){
+      :root{
+        --primary:#f5f5f5;
+        --primary-hover:#ffffff;
+        --primary-soft:rgba(255,255,255,.25);
+      }
+    }
+
+
+    img, svg{
+      filter:none !important;
+      mix-blend-mode:normal !important;
+    }
+
+    body{
+      font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Oxygen,Ubuntu,Cantarell,'Open Sans','Helvetica Neue',sans-serif;
+      margin:0;padding:0;
+      background-color:var(--bg);
+      color:var(--text);
+      transition:all .3s ease;
+    }
+    body.dark-theme{
+      background-color:var(--dark-bg);
+      color:var(--dark-text);
+    }
+
+    
+    .site-header{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      margin-top:6px;
+      margin-bottom:6px;
+      text-align:center;
+    }
+    #site-title{
+      font-size:24px;
+      font-weight:700;
+      cursor:pointer;
+      line-height:1.2;
+      margin-bottom:2px;
+    }
+    #site-datetime{
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.2;
+      white-space:nowrap;
+    }
 
     /* ========= 顶部固定区 ========= */
     .fixed-elements{
@@ -35,7 +92,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       background-color:var(--bg);
       z-index:1000;
       padding:10px;
-      height:150px;
+      height:190px;
       box-shadow:none;
       transition:all .3s ease;
     }
@@ -66,12 +123,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
       display:flex;align-items:center;gap:10px;
       z-index:1001;
     }
-    
-
-.admin-btn:hover,.login-btn:hover{
-  background:var(--btn-bg-hover);
-}
-border:none;border-radius:4px;
+    .admin-btn,.login-btn{
+      background-color:var(--primary);
+      color:#fff;border:none;border-radius:4px;
       padding:8px 16px;font-size:13px;
       cursor:pointer;transition:all .3s ease;
       font-weight:500;
@@ -181,7 +235,7 @@ border:none;border-radius:4px;
 
     /* ========= 主体内容 ========= */
     .content{
-      margin-top:170px;padding:10px;
+      margin-top:210px;padding:10px;
       max-width:1600px;margin-left:auto;margin-right:auto;
       transition:opacity .3s ease;
     }
@@ -200,11 +254,15 @@ border:none;border-radius:4px;
     }
     .search-bar:focus-within{ box-shadow:0 3px 12px rgba(0,0,0,.1);border-color:var(--primary); }
     .search-bar select{
-      border:none;background:#f4f7fa;
-      padding:10px 15px;font-size:14px;
-      color:var(--primary);width:120px;outline:none;
+      border:none;
+      background:var(--bg);
+      padding:10px 15px;
+      font-size:14px;
+      color:var(--primary);
+      width:120px;
+      outline:none;
       appearance:none;
-      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6" viewBox="0 0 12 6"><path fill="%233b82f6" d="M0 0l6 6 6-6z"/></svg>');
+      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6" viewBox="0 0 12 6"><path fill="currentColor" d="M0 0l6 6 6-6z"/></svg>');
       background-repeat:no-repeat;
       background-position:right 10px center;
       cursor:pointer;transition:all .3s ease;
@@ -325,29 +383,20 @@ border:none;border-radius:4px;
     }
     body.dark-theme .admin-label{ color:#e5e7eb; }
 .round-btn{
-  background:var(--btn-gradient);
-  color:var(--btn-text);
-  border:none;
-  border-radius:50%;
-  width:40px;height:40px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  box-shadow:var(--btn-shadow);
-  transition:.25s;
-}
-
-.round-btn:hover{
-  transform:translateY(-3px);
-  background:var(--btn-bg-hover);
-}
-
-.round-btn:active{
-  transform:translateY(-1px);
-}
-
+      background:var(--primary);
+      color:#fff;border:none;border-radius:50%;
+      width:40px;height:40px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:22px;cursor:pointer;
+      box-shadow:0 3px 10px rgba(0,0,0,.15);
+      transition:all .3s ease;
+      position:relative;
     }
-
+    .round-btn:hover{
+      transform:translateY(-3px);
+      box-shadow:0 5px 15px rgba(0,0,0,.2);
+    }
+    body.dark-theme .round-btn{ background:var(--dark-primary); }
     .round-btn svg{ pointer-events:none;display:block;margin:auto; }
 
     /* 按钮顺序 */
@@ -357,6 +406,21 @@ border:none;border-radius:4px;
     .category-manage-btn{ order:4; }
     .export-btn{ order:5; }
     .import-btn{ order:6; }
+
+    
+    .ai-btn{
+      background:var(--primary);
+      color:#fff;
+      border:none;
+      border-radius:6px;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .ai-btn:hover{
+      background:var(--primary-hover);
+    }
 
     /* ========= 分类区 & 卡片 ========= */
     .section{ margin-bottom:25px;padding:0 15px; }
@@ -402,14 +466,14 @@ border:none;border-radius:4px;
       box-shadow:0 3px 10px rgba(0,0,0,.06);
       cursor:pointer;transition:all .3s ease;
       position:relative;user-select:none;
-      border-left:3px solid var(--accent-border);
+      border-left:3px solid var(--primary);
       animation:fadeIn .3s ease forwards;
       animation-delay:calc(var(--card-index) * .05s);
       opacity:0;margin:2px;
     }
     body.dark-theme .card{
       background:var(--dark-card);
-
+      border-left-color:var(--dark-primary);
       box-shadow:0 4px 12px rgba(0,0,0,.2);
     }
     @keyframes fadeIn{ from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
@@ -423,13 +487,26 @@ border:none;border-radius:4px;
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       transition:color .3s ease;
     }
+    .card-desc{
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:4px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
     .card-url{
+      display:none;
+
       font-size:12px;color:var(--muted);
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       transition:color .3s ease;
     }
     body.dark-theme .card-title{ color:var(--dark-text); }
-    body.dark-theme .card-url{ color:var(--dark-muted); }
+    body.dark-theme .card-url{
+      display:none;
+ color:var(--dark-muted); }
 
     .private-tag{
       background:#ff9800;color:#fff;
@@ -715,7 +792,18 @@ border:none;border-radius:4px;
       }
       .card{ width:auto;max-width:100%;padding:12px;margin:0;border-radius:8px; }
       .card-title{ font-size:13px;max-width:100%; }
-      .card-url{ font-size:11px;max-width:100%; }
+      .card-desc{
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:4px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .card-url{
+      display:none;
+ font-size:11px;max-width:100%; }
       .add-remove-controls{ right:10px;bottom:120px;top:auto;transform:none;gap:10px;padding:10px;max-height:calc(100vh - 260px); }
       .admin-label{ font-size:12px;max-width:160px;white-space:normal; }
       .admin-panel-title{ font-size:12px; }
@@ -725,11 +813,70 @@ border:none;border-radius:4px;
       #dialog-box{ width:90%;max-width:350px;padding:20px; }
       .section-title{ font-size:20px;min-width:100px; }
     }
-  </style>
+  
+/* ===== 后台操作面板修正（固定不随页面滚动） ===== */
+.add-remove-controls{
+  position: fixed !important;
+  right: 20px;
+  top: 200px;
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+  z-index: 2000;
+}
+
+
+/* ===== 描述输入框 + AI 按钮对齐修正 ===== */
+.desc-ai-row{
+  display:flex;
+  align-items:stretch;
+  gap:6px;
+}
+.desc-ai-row input{
+  flex:1;
+}
+.desc-ai-row .ai-btn{
+  height:40px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+
+/* ===== 后台操作面板：边缘拉出模式 ===== */
+.add-remove-controls{
+  position: fixed !important;
+  top: 180px;
+  right: -280px;          /* 默认完全隐藏 */
+  width: 260px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  z-index: 2000;
+  transition: right .25s ease;
+}
+.add-remove-controls.open{
+  right: 20px;
+}
+
+/* 右侧边缘拉出按钮 */
+.admin-panel-handle{
+  position: fixed;
+  right: 0;
+  top: 55%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 80px;
+  border-radius: 8px 0 0 8px;
+  background: var(--primary);
+  cursor: pointer;
+  z-index: 2100;
+}
+
+</style>
 </head>
 <body>
   <div class="fixed-elements">
-    <h3>我的导航</h3>
+    <div id="site-title" style="text-align:center;font-size:24px;font-weight:700;cursor:pointer;">我的导航</div>
+    <div id="site-datetime" style="text-align:center;font-size:13px;color:var(--muted);margin-top:6px;"></div>
 
     <div class="center-content">
       <!-- 搜索栏 -->
@@ -778,6 +925,16 @@ border:none;border-radius:4px;
     <!-- 管理控制按钮 -->
     <div class="add-remove-controls">
       <div class="admin-panel-title">后台操作</div>
+      <div class="admin-action">
+        <button class="round-btn" onclick="editSiteTitle()" title="修改站点名称">
+          <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 42h36" stroke="white" stroke-width="4"/>
+            <path d="M14 34l20-20 6 6-20 20H14v-6z" stroke="white" stroke-width="4" fill="none"/>
+          </svg>
+        </button>
+        <span class="admin-label">0.修改站点名称</span>
+      </div>
+
 
       <div class="admin-action">
         <button class="round-btn remove-btn" onclick="toggleRemoveMode()" title="编辑链接">
@@ -786,7 +943,7 @@ border:none;border-radius:4px;
           <path d="M14 26.72V34h7.32L42 13.31 34.7 6 14 26.72Z" stroke="white" stroke-width="4" stroke-linejoin="round" fill="none"/>
         </svg>
       </button>
-        <span class="admin-label">1 编辑链接（开启/关闭编辑按钮）</span>
+        <span class="admin-label">1.编辑链接（开启/关闭编辑按钮）</span>
       </div>
 
       <div class="admin-action">
@@ -796,7 +953,7 @@ border:none;border-radius:4px;
           <path d="M32 24H16M24 16v16" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
       </button>
-        <span class="admin-label">2 添加链接</span>
+        <span class="admin-label">2.添加链接</span>
       </div>
 
       <div class="admin-action">
@@ -806,7 +963,7 @@ border:none;border-radius:4px;
           <path d="M18 27h12M24 21v12" stroke="white" stroke-width="4" stroke-linecap="round"/>
         </svg>
       </button>
-        <span class="admin-label">3 添加分类</span>
+        <span class="admin-label">3.添加分类</span>
       </div>
 
       <div class="admin-action">
@@ -817,7 +974,7 @@ border:none;border-radius:4px;
           <path d="M24 21v3m0 8v3m4.8-12-2.1 2.1M20.8 31l-2.1 2.1M19 23l2.1 2.1M27 31l2.1 2.1M17 28h3M28 28h3" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
-        <span class="admin-label">4 分类管理（改名/删除/上下移动）</span>
+        <span class="admin-label">4.分类管理（改名/删除/上下移动）</span>
       </div>
 
       <div class="admin-action">
@@ -828,7 +985,7 @@ border:none;border-radius:4px;
           <path d="M10 38h28" stroke="white" stroke-width="4" stroke-linecap="round"/>
         </svg>
       </button>
-        <span class="admin-label">5 导出数据（备份 JSON）</span>
+        <span class="admin-label">5.导出数据（备份 JSON）</span>
       </div>
 
       <div class="admin-action">
@@ -839,7 +996,7 @@ border:none;border-radius:4px;
           <path d="M10 10h28" stroke="white" stroke-width="4" stroke-linecap="round"/>
         </svg>
       </button>
-        <span class="admin-label">6 导入数据（覆盖恢复）</span>
+        <span class="admin-label">6.导入数据（覆盖恢复）</span>
       </div>
 
       <input type="file" id="import-file" accept="application/json" style="display:none;" />
@@ -865,7 +1022,12 @@ border:none;border-radius:4px;
         <label for="url-input">地址</label>
         <input type="text" id="url-input" placeholder="必填" />
         <label for="tips-input">描述</label>
-        <input type="text" id="tips-input" placeholder="可选" />
+        
+<div class="desc-ai-row">
+  <input type="text" id="tips-input" placeholder="可选" style="flex:1;" />
+  <button type="button" id="ai-generate-btn" class="ai-btn">AI</button>
+</div>
+
         <label for="icon-input">图标</label>
         <input type="text" id="icon-input" placeholder="可选" />
         <label for="category-select">选择分类</label>
@@ -1394,12 +1556,17 @@ border:none;border-radius:4px;
       cardTop.appendChild(icon);
       cardTop.appendChild(title);
 
+      const descEl = document.createElement("div");
+      descEl.className = "card-desc";
+      if(link.tips){
+        descEl.textContent = link.tips.length > 28 ? link.tips.slice(0,28)+"…" : link.tips;
+      }
       const urlEl = document.createElement("div");
       urlEl.className = "card-url";
       urlEl.textContent = link.url;
 
       card.appendChild(cardTop);
-      card.appendChild(urlEl);
+      card.appendChild(descEl);
 
       if(link.isPrivate){
         const privateTag = document.createElement("div");
@@ -1981,7 +2148,7 @@ border:none;border-radius:4px;
     }
 
     function openGitHub(){
-      window.open("https://github.com/hmhm2022/Card-Tab", "_blank");
+      window.open("https://github.com/hmhm2022/Nav-CF", "_blank");
       logAction("访问GitHub仓库");
     }
 
@@ -2480,10 +2647,171 @@ border:none;border-radius:4px;
         console.error("Initialization failed");
       }
     });
-  </script>
+  
+/* ===== 北京时间 ===== */
+function updateBeijingTime(){
+  const now = new Date();
+  const bj = new Date(now.toLocaleString("en-US",{timeZone:"Asia/Shanghai"}));
+  const week=["星期日","星期一","星期二","星期三","星期四","星期五","星期六"];
+  document.getElementById("site-datetime").textContent =
+    bj.getFullYear()+"年"+(bj.getMonth()+1)+"月"+bj.getDate()+"日 "+
+    week[bj.getDay()]+" "+bj.toLocaleTimeString("zh-CN",{hour12:false});
+}
+setInterval(updateBeijingTime,1000);
+updateBeijingTime();
+
+/* ===== 标题可编辑并保存 ===== */
+const titleEl=document.getElementById("site-title");
+const savedTitle=localStorage.getItem("siteTitle");
+if(savedTitle) titleEl.textContent=savedTitle;
+
+if(isAdmin){
+  titleEl.title="点击修改标题";
+  titleEl.onclick=()=>{
+    const v=prompt("请输入站点标题",titleEl.textContent);
+    if(v){
+      titleEl.textContent=v;
+      localStorage.setItem("siteTitle",v);
+    }
+  };
+}
+
+
+/* ===== 后台：修改站点名称 ===== */
+function editSiteTitle(){
+  const titleEl = document.getElementById("site-title");
+  if(!titleEl) return;
+  const v = prompt("请输入站点名称", titleEl.textContent);
+  if(v){
+    titleEl.textContent = v;
+    localStorage.setItem("siteTitle", v);
+  }
+}
+
+
+/* ===== 自动抓取网站描述 ===== */
+async function fetchSiteDescription(url){
+  try{
+    const res = await fetch("/api/fetchMeta?url="+encodeURIComponent(url));
+    const data = await res.json();
+    return data.description || "";
+  }catch(e){ return ""; }
+}
+
+document.getElementById("url-input")?.addEventListener("blur", async function(){
+  const url = this.value;
+  if(!url) return;
+  const tipsInput = document.getElementById("tips-input");
+  if(tipsInput && !tipsInput.value){
+    tipsInput.value = await fetchSiteDescription(url);
+  }
+});
+
+
+/* ===== AI 自动生成名称 / 描述 / 图标 ===== */
+document.getElementById("ai-generate-btn")?.addEventListener("click", async ()=>{
+  const url = document.getElementById("url-input")?.value;
+  if(!url){
+    alert("请先输入网址");
+    return;
+  }
+  try{
+    const res = await fetch("/api/aiGenerate?url="+encodeURIComponent(url));
+    const data = await res.json();
+
+    if(data.name && document.getElementById("name-input")){
+      document.getElementById("name-input").value = data.name;
+    }
+    if(data.description && document.getElementById("tips-input")){
+      document.getElementById("tips-input").value = data.description;
+    }
+    if(data.icon && document.getElementById("icon-input")){
+      document.getElementById("icon-input").value = data.icon;
+    }
+  }catch(e){
+    console.error("AI 生成失败");
+  }
+});
+
+
+/* ===== 后台面板拉出/自动收起 ===== */
+function openAdminPanel(){
+  const panel = document.querySelector(".add-remove-controls");
+  if(panel) panel.classList.add("open");
+}
+
+document.addEventListener("click", (e) => {
+  const panel = document.querySelector(".add-remove-controls");
+  const handle = document.querySelector(".admin-panel-handle");
+  if(!panel || !handle) return;
+
+  if(panel.classList.contains("open")){
+    if(!panel.contains(e.target) && !handle.contains(e.target)){
+      panel.classList.remove("open");
+    }
+  }
+});
+
+
+/* ===== FREE AI 前端兜底填充 ===== */
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("ai-generate-btn");
+  if(!btn) return;
+
+  btn.addEventListener("click", async () => {
+    const url = document.getElementById("url-input")?.value;
+    if(!url){ alert("请先输入网址"); return; }
+
+    btn.disabled = true;
+    btn.textContent = "AI...";
+
+    try{
+      const res = await fetch("/api/aiGenerate",{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+
+      if(data.name && !document.getElementById("name-input").value){
+        document.getElementById("name-input").value = data.name;
+      }
+      if(data.desc){
+        document.getElementById("tips-input").value = data.desc;
+      }
+    }catch(e){
+      
+    }finally{
+      btn.disabled = false;
+      btn.textContent = "AI";
+    }
+  });
+});
+
+</script>
+
+<div class="admin-panel-handle" onclick="openAdminPanel()" title="后台操作"></div>
+
 </body>
 </html>
 `;
+
+/* =================== Seed Data (optional) =================== */
+let __seedEnsured = false;
+async function ensureSeed(env) {
+  if (__seedEnsured) return;
+  try {
+    const existing = await env.CARD_ORDER.get(SEED_USER_ID);
+    if (!existing) {
+      await env.CARD_ORDER.put(SEED_USER_ID, JSON.stringify(SEED_DATA));
+    }
+  } catch (e) {
+    // Ignore seed init errors to avoid blocking the site
+  } finally {
+    __seedEnsured = true;
+  }
+}
+
 
 /* =================== Security Helpers (Worker) =================== */
 
@@ -2564,6 +2892,7 @@ async function validateAdminToken(authToken, env) {
 
 export default {
   async fetch(request, env) {
+    await ensureSeed(env);
     const url = new URL(request.url);
 
     // Home page
@@ -2887,6 +3216,86 @@ for (let i = 0; i < links.length; i++) {
           headers: { "Content-Type": "application/json; charset=utf-8" }
         });
       }
+    }
+
+    
+    // ===== FREE aiGenerate: meta-based (no paid API) =====
+    if (url.pathname === "/api/aiGenerate") {
+      const auth = request.headers.get("Authorization");
+      if (auth !== env.ADMIN_PASSWORD) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const { url: targetUrl } = await request.json();
+      if (!targetUrl) {
+        return Response.json({ name: "", desc: "" });
+      }
+
+      try {
+        const res = await fetch(targetUrl, {
+          headers: { "User-Agent": "Mozilla/5.0" }
+        });
+        const html = await res.text();
+
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)/i);
+
+        const name = titleMatch ? titleMatch[1].trim().slice(0, 12) : new URL(targetUrl).hostname;
+        const desc = descMatch ? descMatch[1].trim().slice(0, 40) : "常用网站";
+
+        return Response.json({ name, desc });
+      } catch (e) {
+        return Response.json({
+          name: new URL(targetUrl).hostname,
+          desc: "常用网站"
+        });
+      }
+    }
+
+    
+    // ===== FREE aiGenerate (robust, never fail) =====
+    if (url.pathname === "/api/aiGenerate") {
+      let targetUrl = "";
+      try{
+        const body = await request.json();
+        targetUrl = body.url || "";
+      }catch(e){}
+
+      if (!targetUrl) {
+        return Response.json({ name: "", desc: "" });
+      }
+
+      let hostname = targetUrl;
+      try{ hostname = new URL(targetUrl).hostname; }catch(e){}
+
+      let html = "";
+
+      // Try direct fetch
+      try{
+        const res = await fetch(targetUrl, {
+          headers:{ "User-Agent":"Mozilla/5.0" },
+          redirect:"follow"
+        });
+        html = await res.text();
+      }catch(e){}
+
+      // Fallback: textise proxy
+      if(!html || html.length < 200){
+        try{
+          const textiseUrl = "https://textise.net/showtext.aspx?strURL=" + encodeURIComponent(targetUrl);
+          const res2 = await fetch(textiseUrl, { redirect:"follow" });
+          html = await res2.text();
+        }catch(e){}
+      }
+
+      const ogTitle = html.match(/og:title[^>]*content=["']([^"']+)/i);
+      const ogDesc  = html.match(/og:description[^>]*content=["']([^"']+)/i);
+      const title   = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const desc    = html.match(/name=["']description["'][^>]*content=["']([^"']+)/i);
+
+      const name = (ogTitle?.[1] || title?.[1] || hostname).replace(/\s+/g," ").trim().slice(0,16);
+      const description = (ogDesc?.[1] || desc?.[1] || "常用网站").replace(/\s+/g," ").trim().slice(0,40);
+
+      return Response.json({ name, desc: description });
     }
 
     return new Response("Not Found", { status: 404 });
