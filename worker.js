@@ -824,6 +824,23 @@ const HTML_CONTENT = `<!DOCTYPE html>
   z-index: 2000;
 }
 
+
+/* ===== 描述输入框 + AI 按钮对齐修正 ===== */
+.desc-ai-row{
+  display:flex;
+  align-items:stretch;
+  gap:6px;
+}
+.desc-ai-row input{
+  flex:1;
+}
+.desc-ai-row .ai-btn{
+  height:40px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
 </style>
 </head>
 <body>
@@ -976,7 +993,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         <input type="text" id="url-input" placeholder="必填" />
         <label for="tips-input">描述</label>
         
-<div style="display:flex;gap:6px;align-items:center;">
+<div class="desc-ai-row">
   <input type="text" id="tips-input" placeholder="可选" style="flex:1;" />
   <button type="button" id="ai-generate-btn" class="ai-btn">AI</button>
 </div>
