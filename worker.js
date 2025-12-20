@@ -62,13 +62,37 @@ const HTML_CONTENT = `<!DOCTYPE html>
       color:var(--dark-text);
     }
 
+    
+    .site-header{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      margin-top:6px;
+      margin-bottom:6px;
+      text-align:center;
+    }
+    #site-title{
+      font-size:24px;
+      font-weight:700;
+      cursor:pointer;
+      line-height:1.2;
+      margin-bottom:2px;
+    }
+    #site-datetime{
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.2;
+      white-space:nowrap;
+    }
+
     /* ========= 顶部固定区 ========= */
     .fixed-elements{
       position:fixed;top:0;left:0;right:0;
       background-color:var(--bg);
       z-index:1000;
       padding:10px;
-      height:150px;
+      height:190px;
       box-shadow:none;
       transition:all .3s ease;
     }
@@ -211,7 +235,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
     /* ========= 主体内容 ========= */
     .content{
-      margin-top:170px;padding:10px;
+      margin-top:210px;padding:10px;
       max-width:1600px;margin-left:auto;margin-right:auto;
       transition:opacity .3s ease;
     }
