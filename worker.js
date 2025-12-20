@@ -2,6 +2,8 @@
 // KV Binding name MUST be: CARD_ORDER
 // Env var required: ADMIN_PASSWORD
 
+import { SEED_DATA, SEED_USER_ID } from "./db.js";
+
 const HTML_CONTENT = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -10,24 +12,48 @@ const HTML_CONTENT = `<!DOCTYPE html>
   <title>Card Tab</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>⭐</text></svg>">
   <style>
-/* ===== 黑白按钮主题（白色模式） ===== */
---btn-bg:#111111;
---btn-bg-hover:#000000;
---btn-text:#ffffff;
+    /* ========= 全局 ========= */
+    :root{
+      --primary:#000;
+      --primary-hover:#000;
+      --primary-soft:rgba(0,0,0,.2);
+      --danger:#000;
+      --danger-hover:#000;
 
---btn-gradient:linear-gradient(
-  180deg,
-  #2b2b2b 0%,
-  #111111 100%
-);
+      --bg:#ffffff;
+      --text:#000000;
+      --muted:#333333;
 
---btn-shadow:
-  0 4px 10px rgba(0,0,0,.25),
-  inset 0 1px 0 rgba(255,255,255,.15);
+      --dark-bg:#000000;
+      --dark-card:#000000;
+      --dark-surface:#000000;
+      --dark-border:#ffffff;
+      --dark-text:#ffffff;
+      --dark-muted:#cccccc;
 
-/* 卡片左侧强调边 */
---accent-border:#111111;
+      --dark-primary:#ffffff;
+      --dark-primary-hover:#ffffff;
+    }
+/* ========= 高对比 · 无动画 ========= */
+    *,
+    *::before,
+    *::after{
+      animation:none !important;
+      transition:none !important;
+      scroll-behavior:auto !important;
+    }
 
+    body{
+      font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Oxygen,Ubuntu,Cantarell,'Open Sans','Helvetica Neue',sans-serif;
+      margin:0;padding:0;
+      background-color:var(--bg);
+      color:var(--text);
+      transition:all .3s ease;
+    }
+    body.dark-theme{
+      background-color:var(--dark-bg);
+      color:var(--dark-text);
+    }
 
     /* ========= 顶部固定区 ========= */
     .fixed-elements{
@@ -66,12 +92,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
       display:flex;align-items:center;gap:10px;
       z-index:1001;
     }
-    
-
-.admin-btn:hover,.login-btn:hover{
-  background:var(--btn-bg-hover);
-}
-border:none;border-radius:4px;
+    .admin-btn,.login-btn{
+      background-color:var(--primary);
+      color:#fff;border:none;border-radius:4px;
       padding:8px 16px;font-size:13px;
       cursor:pointer;transition:all .3s ease;
       font-weight:500;
@@ -325,29 +348,20 @@ border:none;border-radius:4px;
     }
     body.dark-theme .admin-label{ color:#e5e7eb; }
 .round-btn{
-  background:var(--btn-gradient);
-  color:var(--btn-text);
-  border:none;
-  border-radius:50%;
-  width:40px;height:40px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  box-shadow:var(--btn-shadow);
-  transition:.25s;
-}
-
-.round-btn:hover{
-  transform:translateY(-3px);
-  background:var(--btn-bg-hover);
-}
-
-.round-btn:active{
-  transform:translateY(-1px);
-}
-
+      background:var(--primary);
+      color:#fff;border:none;border-radius:50%;
+      width:40px;height:40px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:22px;cursor:pointer;
+      box-shadow:0 3px 10px rgba(0,0,0,.15);
+      transition:all .3s ease;
+      position:relative;
     }
-
+    .round-btn:hover{
+      transform:translateY(-3px);
+      box-shadow:0 5px 15px rgba(0,0,0,.2);
+    }
+    body.dark-theme .round-btn{ background:var(--dark-primary); }
     .round-btn svg{ pointer-events:none;display:block;margin:auto; }
 
     /* 按钮顺序 */
@@ -402,14 +416,14 @@ border:none;border-radius:4px;
       box-shadow:0 3px 10px rgba(0,0,0,.06);
       cursor:pointer;transition:all .3s ease;
       position:relative;user-select:none;
-      border-left:3px solid var(--accent-border);
+      border-left:3px solid var(--primary);
       animation:fadeIn .3s ease forwards;
       animation-delay:calc(var(--card-index) * .05s);
       opacity:0;margin:2px;
     }
     body.dark-theme .card{
       background:var(--dark-card);
-
+      border-left-color:var(--dark-primary);
       box-shadow:0 4px 12px rgba(0,0,0,.2);
     }
     @keyframes fadeIn{ from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
@@ -2485,6 +2499,23 @@ border:none;border-radius:4px;
 </html>
 `;
 
+/* =================== Seed Data (optional) =================== */
+let __seedEnsured = false;
+async function ensureSeed(env) {
+  if (__seedEnsured) return;
+  try {
+    const existing = await env.CARD_ORDER.get(SEED_USER_ID);
+    if (!existing) {
+      await env.CARD_ORDER.put(SEED_USER_ID, JSON.stringify(SEED_DATA));
+    }
+  } catch (e) {
+    // Ignore seed init errors to avoid blocking the site
+  } finally {
+    __seedEnsured = true;
+  }
+}
+
+
 /* =================== Security Helpers (Worker) =================== */
 
 // Constant-time comparison to mitigate timing attacks
@@ -2564,6 +2595,7 @@ async function validateAdminToken(authToken, env) {
 
 export default {
   async fetch(request, env) {
+    await ensureSeed(env);
     const url = new URL(request.url);
 
     // Home page
