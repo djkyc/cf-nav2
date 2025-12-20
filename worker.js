@@ -497,12 +497,16 @@ const HTML_CONTENT = `<!DOCTYPE html>
     }
 
     .card-url{
+      display:none;
+
       font-size:12px;color:var(--muted);
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       transition:color .3s ease;
     }
     body.dark-theme .card-title{ color:var(--dark-text); }
-    body.dark-theme .card-url{ color:var(--dark-muted); }
+    body.dark-theme .card-url{
+      display:none;
+ color:var(--dark-muted); }
 
     .private-tag{
       background:#ff9800;color:#fff;
@@ -797,7 +801,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
       text-overflow:ellipsis;
     }
 
-    .card-url{ font-size:11px;max-width:100%; }
+    .card-url{
+      display:none;
+ font-size:11px;max-width:100%; }
       .add-remove-controls{ right:10px;bottom:120px;top:auto;transform:none;gap:10px;padding:10px;max-height:calc(100vh - 260px); }
       .admin-label{ font-size:12px;max-width:160px;white-space:normal; }
       .admin-panel-title{ font-size:12px; }
@@ -1514,7 +1520,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
       card.appendChild(cardTop);
       card.appendChild(descEl);
-      card.appendChild(urlEl);
 
       if(link.isPrivate){
         const privateTag = document.createElement("div");
