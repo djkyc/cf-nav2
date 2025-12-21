@@ -1264,13 +1264,1698 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
   <div id="custom-tooltip"></div>
 
+  <script>
+    /* ================= 搜索引擎 ================= */
+    const searchEngines = {
+      baidu: "https://www.baidu.com/s?wd=",
+      bing: "https://www.bing.com/search?q=",
+      google: "https://www.google.com/search?q=",
+      duckduckgo: "https://duckduckgo.com/?q="
+    };
+    let currentEngine = "baidu";
+
+    function logAction(action, details){
+      try{
+        const timestamp = new Date().toISOString();
+        console.log(timestamp + ": " + action + " - " + JSON.stringify(details || {}));
+      }catch(e){}
+    }
+
+    function setActiveEngine(engine){
+      currentEngine = engine;
+      document.getElementById("search-engine-select").value = engine;
+      logAction("设置搜索引擎", { engine: engine });
+    }
+
+    document.getElementById("search-engine-select").addEventListener("change", function(){
+      setActiveEngine(this.value);
+    });
+
+    document.getElementById("search-button").addEventListener("click", function(){
+      const query = document.getElementById("search-input").value;
+      if(query){
+        logAction("执行搜索", { engine: currentEngine, query: query });
+        window.open(searchEngines[currentEngine] + encodeURIComponent(query), "_blank");
+      }
+    });
+
+    document.getElementById("search-input").addEventListener("keypress", function(e){
+      if(e.key === "Enter"){
+        document.getElementById("search-button").click();
+      }
+    });
+
+    setActiveEngine(currentEngine);
+
+    /* ================= 全局状态 ================= */
+    let publicLinks = [];
+    let privateLinks = [];
+    let isAdmin = false;
+    let isLoggedIn = false;
+    let removeMode = false;
+    let isEditCategoryMode = false;
+    let isDarkTheme = false;
+    let links = [];
+    const categories = {};
+
+    /* ================= 分类管理 ================= */
+    async function addCategory(){
+      if(!await validateToken()) return;
+      const categoryName = await showCategoryDialog("请输入新分类名称");
+      if(categoryName && !categories[categoryName]){
+        categories[categoryName] = [];
+        updateCategorySelect();
+        renderSections();
+        saveLinks();
+        logAction("添加分类", { categoryName: categoryName, currentLinkCount: links.length });
+      }else if(categories[categoryName]){
+        await customAlert("该分类已存在", "添加分类");
+        logAction("添加分类失败", { categoryName: categoryName, reason: "分类已存在" });
+      }
+    }
+
+    async function deleteCategory(category){
+      if(!await validateToken()) return;
+      const message = '确定要删除 "' + category + '" 分类吗？这将删除该分类下的所有链接。';
+      const confirmed = await customConfirm(message, "确定", "取消");
+      if(confirmed){
+        delete categories[category];
+        links = links.filter(function(l){ return l.category !== category; });
+        publicLinks = publicLinks.filter(function(l){ return l.category !== category; });
+        privateLinks = privateLinks.filter(function(l){ return l.category !== category; });
+        updateCategorySelect();
+        renderSections();
+        renderCategoryButtons();
+        saveLinks();
+        logAction("删除分类", { category: category });
+      }
+    }
+
+    async function editCategoryName(oldName){
+      if(!await validateToken()) return;
+      const newName = await showCategoryDialog("请输入新的分类名称", oldName);
+      if(!newName || newName === oldName) return;
+      if(categories[newName]){
+        await customAlert("该名称已存在，请重新命名", "编辑分类");
+        return;
+      }
+      categories[newName] = categories[oldName];
+      delete categories[oldName];
+
+      publicLinks.concat(privateLinks).forEach(function(link){
+        if(link.category === oldName) link.category = newName;
+      });
+      links.forEach(function(link){
+        if(link.category === oldName) link.category = newName;
+      });
+
+      renderSections();
+      renderCategoryButtons();
+      updateCategorySelect();
+      saveLinks();
+      logAction("编辑分类名称", { oldName: oldName, newName: newName });
+    }
+
+    async function moveCategory(categoryName, direction){
+      if(!await validateToken()) return;
+      const keys = Object.keys(categories);
+      const index = keys.indexOf(categoryName);
+      if(index < 0) return;
+      const newIndex = index + direction;
+      if(newIndex < 0 || newIndex >= keys.length) return;
+
+      const reordered = keys.slice();
+      const tmp = reordered[index];
+      reordered[index] = reordered[newIndex];
+      reordered[newIndex] = tmp;
+
+      const newCategories = {};
+      reordered.forEach(function(k){ newCategories[k] = categories[k]; });
+      Object.keys(categories).forEach(function(k){ delete categories[k]; });
+      Object.assign(categories, newCategories);
+
+      renderSections();
+      renderCategoryButtons();
+      updateCategorySelect();
+      saveLinks();
+      logAction("移动分类", { categoryName: categoryName, direction: direction });
+    }
+
+    function toggleEditCategory(){
+      isEditCategoryMode = !isEditCategoryMode;
+
+      document.querySelectorAll(".delete-category-btn").forEach(function(btn){
+        btn.style.display = isEditCategoryMode ? "inline-block" : "none";
+      });
+      document.querySelectorAll(".edit-category-btn").forEach(function(btn){
+        btn.style.display = isEditCategoryMode ? "inline-block" : "none";
+      });
+      document.querySelectorAll(".move-category-btn").forEach(function(btn){
+        btn.style.display = isEditCategoryMode ? "inline-block" : "none";
+      });
+
+      const manageButton = document.querySelector(".category-manage-btn");
+      if(manageButton){
+        if(isEditCategoryMode) manageButton.classList.add("active");
+        else manageButton.classList.remove("active");
+      }
+      logAction("切换分类编辑模式", { isEditCategoryMode: isEditCategoryMode });
+    }
+
+    /* ================= 分类快捷按钮 ================= */
+    let isShowingSearchResults = false;
+
+    function renderCategoryButtons(){
+      if(isShowingSearchResults) return;
+      const buttonsContainer = document.getElementById("category-buttons-container");
+      buttonsContainer.innerHTML = "";
+
+      const keys = Object.keys(categories);
+      if(keys.length === 0){
+        buttonsContainer.style.display = "none";
+        return;
+      }
+
+      const displayedCategories = [];
+      document.querySelectorAll("#sections-container .section-title").forEach(function(el){
+        displayedCategories.push(el.textContent);
+      });
+
+      let visibleButtonsCount = 0;
+
+      displayedCategories.forEach(function(category){
+        const visibleLinks = links.filter(function(link){
+          return link.category === category && (!link.isPrivate || isLoggedIn);
+        });
+
+        if(visibleLinks.length > 0){
+          const button = document.createElement("button");
+          button.className = "category-button";
+          button.textContent = category;
+          button.dataset.category = category;
+
+          button.onclick = function(){
+            if(isShowingSearchResults) hideSearchResults();
+            document.querySelectorAll(".category-button").forEach(function(btn){ btn.classList.remove("active"); });
+            button.classList.add("active");
+            scrollToCategory(category);
+          };
+
+          buttonsContainer.appendChild(button);
+          visibleButtonsCount++;
+        }
+      });
+
+      buttonsContainer.style.display = visibleButtonsCount > 0 ? "flex" : "none";
+      setTimeout(setActiveCategoryButtonByVisibility, 100);
+    }
+
+    function debounce(func, wait){
+      let timeout;
+      return function(){
+        const context = this;
+        const args = arguments;
+        clearTimeout(timeout);
+        timeout = setTimeout(function(){ func.apply(context, args); }, wait);
+      };
+    }
+
+    function setActiveCategoryButtonByVisibility(){
+      if(isShowingSearchResults) return;
+      const sections = document.querySelectorAll(".section");
+      if(!sections.length) return;
+
+      const viewportHeight = window.innerHeight;
+      const fixedElementsHeight = 170;
+      const viewportCenter = viewportHeight / 2 + fixedElementsHeight;
+
+      let closestSection = null;
+      let closestDistance = Infinity;
+
+      sections.forEach(function(section){
+        const rect = section.getBoundingClientRect();
+        const sectionCenter = rect.top + rect.height / 2;
+        const distance = Math.abs(sectionCenter - viewportCenter);
+        if(distance < closestDistance){
+          closestDistance = distance;
+          closestSection = section;
+        }
+      });
+
+      if(closestSection){
+        const cardContainer = closestSection.querySelector(".card-container");
+        if(cardContainer && cardContainer.id){
+          const categoryId = cardContainer.id;
+          document.querySelectorAll(".category-button").forEach(function(btn){ btn.classList.remove("active"); });
+          document.querySelectorAll(".category-button").forEach(function(btn){
+            if(btn.dataset.category === categoryId) btn.classList.add("active");
+          });
+        }
+      }
+    }
+
+    window.addEventListener("scroll", debounce(setActiveCategoryButtonByVisibility, 100));
+
+    function scrollToCategory(category){
+      const section = document.getElementById(category);
+      if(!section) return;
+
+      let offset = 230;
+      if(window.innerWidth <= 480) offset = 120;
+
+      const rect = section.getBoundingClientRect();
+      const absoluteTop = window.pageYOffset + rect.top - offset;
+
+      window.scrollTo({ top: absoluteTop, behavior: "smooth" });
+      logAction("滚动到分类", { category: category });
+    }
+
+    /* ================= 数据加载/保存 ================= */
+    async function loadLinks(){
+      const headers = { "Content-Type":"application/json" };
+      if(isLoggedIn){
+        const token = localStorage.getItem("authToken");
+        if(token) headers["Authorization"] = token;
+      }
+
+      try{
+        const response = await fetch("/api/getLinks?userId=testUser", { headers: headers });
+        if(!response.ok) throw new Error("HTTP error " + response.status);
+
+        const data = await response.json();
+
+        if(data.categories) Object.assign(categories, data.categories);
+
+        publicLinks = data.links ? data.links.filter(function(l){ return !l.isPrivate; }) : [];
+        privateLinks = data.links ? data.links.filter(function(l){ return l.isPrivate; }) : [];
+        links = isLoggedIn ? publicLinks.concat(privateLinks) : publicLinks;
+
+        renderSections();
+        updateCategorySelect();
+        updateUIState();
+
+        logAction("读取链接", {
+          publicCount: publicLinks.length,
+          privateCount: privateLinks.length,
+          isLoggedIn: isLoggedIn,
+          hasToken: !!localStorage.getItem("authToken")
+        });
+      }catch(e){
+        console.error("加载链接失败，请刷新页面重试");
+      }
+    }
+
+    async function saveLinks(){
+      if(isAdmin && !(await validateToken())) return;
+
+      const allLinks = publicLinks.concat(privateLinks);
+
+      try{
+        await fetch("/api/saveOrder", {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "Authorization": localStorage.getItem("authToken")
+          },
+          body: JSON.stringify({
+            userId:"testUser",
+            links: allLinks,
+            categories: categories
+          })
+        });
+        logAction("保存链接", { linkCount: allLinks.length, categoryCount: Object.keys(categories).length });
+      }catch(e){
+        logAction("保存链接失败", { error: "Save operation failed" });
+        console.error("保存链接失败，请重试");
+      }
+    }
+
+    function updateUIState(){
+      const addRemoveControls = document.querySelector(".add-remove-controls");
+      addRemoveControls.style.display = isAdmin ? "flex" : "none";
+      updateLoginButton();
+      logAction("更新UI状态", { isAdmin: isAdmin, isLoggedIn: isLoggedIn });
+    }
+
+    /* ================= 渲染 ================= */
+    function renderSections(){
+      const container = document.getElementById("sections-container");
+      container.innerHTML = "";
+
+      Object.keys(categories).forEach(function(category){
+        const section = document.createElement("div");
+        section.className = "section";
+
+        const titleContainer = document.createElement("div");
+        titleContainer.className = "section-title-container";
+
+        const title = document.createElement("div");
+        title.className = "section-title";
+        title.textContent = category;
+        titleContainer.appendChild(title);
+
+        if(isAdmin){
+          const editBtn = document.createElement("button");
+          editBtn.textContent = "编辑名称";
+          editBtn.className = "edit-category-btn";
+          editBtn.style.display = isEditCategoryMode ? "inline-block" : "none";
+          editBtn.onclick = function(){ editCategoryName(category); };
+          titleContainer.appendChild(editBtn);
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.textContent = "删除分类";
+          deleteBtn.className = "delete-category-btn";
+          deleteBtn.style.display = isEditCategoryMode ? "inline-block" : "none";
+          deleteBtn.onclick = function(){ deleteCategory(category); };
+          titleContainer.appendChild(deleteBtn);
+
+          const upBtn = document.createElement("button");
+          upBtn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 6l-6 6h4v6h4v-6h4z"/></svg>';
+          upBtn.className = "move-category-btn";
+          upBtn.style.display = isEditCategoryMode ? "inline-block" : "none";
+          upBtn.onclick = function(){ moveCategory(category, -1); };
+          titleContainer.appendChild(upBtn);
+
+          const downBtn = document.createElement("button");
+          downBtn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 18l6-6h-4v-6h-4v6h-4z"/></svg>';
+          downBtn.className = "move-category-btn";
+          downBtn.style.display = isEditCategoryMode ? "inline-block" : "none";
+          downBtn.onclick = function(){ moveCategory(category, 1); };
+          titleContainer.appendChild(downBtn);
+        }
+
+        const cardContainer = document.createElement("div");
+        cardContainer.className = "card-container";
+        cardContainer.id = category;
+
+        section.appendChild(titleContainer);
+        section.appendChild(cardContainer);
+
+        let privateCount = 0;
+        let linkCount = 0;
+
+        links.forEach(function(link){
+          if(link.category === category){
+            if(link.isPrivate) privateCount++;
+            linkCount++;
+            createCard(link, cardContainer);
+          }
+        });
+
+        if(privateCount < linkCount || isLoggedIn){
+          container.appendChild(section);
+        }
+      });
+
+      renderCategoryButtons();
+      logAction("渲染分类和链接", { isAdmin: isAdmin, linkCount: links.length, categoryCount: Object.keys(categories).length });
+    }
+
+    function extractDomain(url){
+      try{ return new URL(url).hostname; }catch(e){ return url; }
+    }
+    function isValidUrl(url){
+      try{ new URL(url); return true; }catch(e){ return false; }
+    }
+
+    function createCard(link, container){
+      const card = document.createElement("div");
+      card.className = "card";
+      card.setAttribute("draggable", isAdmin);
+      card.dataset.isPrivate = link.isPrivate;
+      card.setAttribute("data-url", link.url);
+
+      const cardIndex = container.children.length;
+      card.style.setProperty("--card-index", cardIndex);
+
+      const cardTop = document.createElement("div");
+      cardTop.className = "card-top";
+
+      const defaultIconSVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>' +
+        '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>' +
+        '</svg>';
+
+      const icon = document.createElement("img");
+      icon.className = "card-icon";
+      icon.src = (!link.icon || typeof link.icon !== "string" || !link.icon.trim() || !isValidUrl(link.icon))
+        ? "https://www.faviconextractor.com/favicon/" + extractDomain(link.url)
+        : link.icon;
+      icon.alt = "Website Icon";
+      icon.onerror = function(){
+        const svgBlob = new Blob([defaultIconSVG], { type:"image/svg+xml" });
+        const svgUrl = URL.createObjectURL(svgBlob);
+        this.src = svgUrl;
+        this.onload = function(){ URL.revokeObjectURL(svgUrl); };
+      };
+
+      const title = document.createElement("div");
+      title.className = "card-title";
+      title.textContent = link.name;
+
+      cardTop.appendChild(icon);
+      cardTop.appendChild(title);
+
+      const descEl = document.createElement("div");
+      descEl.className = "card-desc";
+      if(link.tips){
+        descEl.textContent = link.tips.length > 28 ? link.tips.slice(0,28)+"…" : link.tips;
+      }
+      const urlEl = document.createElement("div");
+      urlEl.className = "card-url";
+      urlEl.textContent = link.url;
+
+      card.appendChild(cardTop);
+      card.appendChild(descEl);
+
+      if(link.isPrivate){
+        const privateTag = document.createElement("div");
+        privateTag.className = "private-tag";
+        privateTag.textContent = "私密";
+        card.appendChild(privateTag);
+      }
+
+      const correctedUrl = (link.url.startsWith("http://") || link.url.startsWith("https://")) ? link.url : "http://" + link.url;
+
+      if(!isAdmin){
+        card.addEventListener("click", function(){
+          window.open(correctedUrl, "_blank");
+          logAction("打开链接", { name: link.name, url: correctedUrl });
+        });
+      }
+
+      const cardActions = document.createElement("div");
+      cardActions.className = "card-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "card-btn edit-btn";
+      editBtn.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>' +
+        '<path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>' +
+        '</svg>';
+      editBtn.title = "编辑";
+      editBtn.onclick = function(event){
+        event.stopPropagation();
+        showEditDialog(link);
+      };
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "card-btn delete-btn";
+      deleteBtn.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<polyline points="3,6 5,6 21,6"></polyline>' +
+        '<path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>' +
+        '<line x1="10" y1="11" x2="10" y2="17"></line>' +
+        '<line x1="14" y1="11" x2="14" y2="17"></line>' +
+        '</svg>';
+      deleteBtn.title = "删除";
+      deleteBtn.onclick = function(event){
+        event.stopPropagation();
+        removeCard(card);
+      };
+
+      cardActions.appendChild(editBtn);
+      cardActions.appendChild(deleteBtn);
+      card.appendChild(cardActions);
+
+      card.addEventListener("mousemove", function(e){ handleTooltipMouseMove(e, link.tips, isAdmin); });
+      card.addEventListener("mouseleave", handleTooltipMouseLeave);
+
+      card.addEventListener("dragstart", dragStart);
+      card.addEventListener("dragover", dragOver);
+      card.addEventListener("dragend", dragEnd);
+      card.addEventListener("drop", drop);
+      card.addEventListener("touchstart", touchStart, { passive:false });
+
+      if(isAdmin && removeMode){
+        editBtn.style.display = "flex";
+        deleteBtn.style.display = "flex";
+      }
+
+      if(isAdmin || (link.isPrivate && isLoggedIn) || !link.isPrivate){
+        container.appendChild(card);
+      }
+    }
+
+    function updateCategorySelect(){
+      const categorySelect = document.getElementById("category-select");
+      categorySelect.innerHTML = "";
+      Object.keys(categories).forEach(function(category){
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        categorySelect.appendChild(option);
+      });
+      logAction("更新分类选择", { categoryCount: Object.keys(categories).length });
+    }
+
+    /* ================= 添加/删除/编辑卡片 ================= */
+    let currentConfirmHandler = null;
+    let currentCancelHandler = null;
+
+    function showEditDialog(link){
+      document.getElementById("dialog-overlay").style.display = "flex";
+      document.getElementById("name-input").value = link.name;
+      document.getElementById("url-input").value = link.url;
+      document.getElementById("tips-input").value = link.tips || "";
+      document.getElementById("icon-input").value = link.icon || "";
+      document.getElementById("category-select").value = link.category;
+      document.getElementById("private-checkbox").checked = !!link.isPrivate;
+
+      const confirmBtn = document.getElementById("dialog-confirm-btn");
+      const cancelBtn = document.getElementById("dialog-cancel-btn");
+
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      if(currentConfirmHandler) confirmBtn.removeEventListener("click", currentConfirmHandler);
+      if(currentCancelHandler) cancelBtn.removeEventListener("click", currentCancelHandler);
+
+      currentConfirmHandler = async function(event){
+        event.preventDefault();event.stopPropagation();
+        await updateLink(link);
+      };
+      currentCancelHandler = function(event){
+        event.preventDefault();event.stopPropagation();
+        hideAddDialog();
+      };
+
+      confirmBtn.addEventListener("click", currentConfirmHandler);
+      cancelBtn.addEventListener("click", currentCancelHandler);
+      logAction("显示编辑链接对话框");
+    }
+
+    function showAddDialog(){
+      document.getElementById("dialog-overlay").style.display = "flex";
+      const nameInput = document.getElementById("name-input");
+      nameInput.value = "";
+      document.getElementById("url-input").value = "";
+      document.getElementById("tips-input").value = "";
+      document.getElementById("icon-input").value = "";
+      document.getElementById("private-checkbox").checked = false;
+
+      const confirmBtn = document.getElementById("dialog-confirm-btn");
+      const cancelBtn = document.getElementById("dialog-cancel-btn");
+
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      if(currentConfirmHandler) confirmBtn.removeEventListener("click", currentConfirmHandler);
+      if(currentCancelHandler) cancelBtn.removeEventListener("click", currentCancelHandler);
+
+      currentConfirmHandler = async function(event){
+        event.preventDefault();event.stopPropagation();
+        await addLink();
+      };
+      currentCancelHandler = function(event){
+        event.preventDefault();event.stopPropagation();
+        hideAddDialog();
+      };
+
+      confirmBtn.addEventListener("click", currentConfirmHandler);
+      cancelBtn.addEventListener("click", currentCancelHandler);
+
+      setTimeout(function(){ nameInput.focus(); }, 50);
+      logAction("显示添加链接对话框");
+    }
+
+    function hideAddDialog(){
+      document.getElementById("dialog-overlay").style.display = "none";
+
+      const confirmBtn = document.getElementById("dialog-confirm-btn");
+      const cancelBtn = document.getElementById("dialog-cancel-btn");
+
+      if(currentConfirmHandler){
+        confirmBtn.removeEventListener("click", currentConfirmHandler);
+        currentConfirmHandler = null;
+      }
+      if(currentCancelHandler){
+        cancelBtn.removeEventListener("click", currentCancelHandler);
+        currentCancelHandler = null;
+      }
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      logAction("隐藏添加链接对话框");
+    }
+
+    async function addLink(){
+      if(!await validateToken()) return;
+
+      const name = document.getElementById("name-input").value.trim();
+      const url = document.getElementById("url-input").value.trim();
+      const tips = document.getElementById("tips-input").value.trim();
+      const icon = document.getElementById("icon-input").value.trim();
+      const category = document.getElementById("category-select").value;
+      const isPrivate = document.getElementById("private-checkbox").checked;
+
+      if(!name || !url || !category){
+        let errorMessage = "";
+        if(!name && !url) errorMessage = "请输入名称和URL";
+        else if(!name) errorMessage = "请输入名称";
+        else if(!url) errorMessage = "请输入URL";
+        await customAlert(errorMessage, "添加卡片");
+        if(!name) document.getElementById("name-input").focus();
+        else if(!url) document.getElementById("url-input").focus();
+        return;
+      }
+
+      const normalizedUrl = url.toLowerCase();
+      const allLinks = publicLinks.concat(privateLinks);
+      const isUrlExists = allLinks.some(function(l){ return (l.url || "").toLowerCase() === normalizedUrl; });
+      if(isUrlExists){
+        await customAlert("该URL已存在，请勿重复添加", "添加卡片");
+        document.getElementById("url-input").focus();
+        return;
+      }
+
+      const newLink = { name: name, url: url, tips: tips, icon: icon, category: category, isPrivate: !!isPrivate };
+      if(isPrivate) privateLinks.push(newLink);
+      else publicLinks.push(newLink);
+
+      links = isLoggedIn ? publicLinks.concat(privateLinks) : publicLinks;
+
+      const container = document.getElementById(category);
+      if(container) createCard(newLink, container);
+      else { categories[category] = []; renderSections(); }
+
+      await saveLinks();
+
+      document.getElementById("name-input").value = "";
+      document.getElementById("url-input").value = "";
+      document.getElementById("tips-input").value = "";
+      document.getElementById("icon-input").value = "";
+      document.getElementById("private-checkbox").checked = false;
+
+      hideAddDialog();
+      logAction("添加卡片", { name: name, url: url, tips: tips, icon: icon, category: category, isPrivate: !!isPrivate });
+    }
+
+    async function updateLink(oldLink){
+      if(!await validateToken()) return;
+
+      const name = document.getElementById("name-input").value.trim();
+      const url = document.getElementById("url-input").value.trim();
+      const tips = document.getElementById("tips-input").value.trim();
+      const icon = document.getElementById("icon-input").value.trim();
+      const category = document.getElementById("category-select").value;
+      const isPrivate = document.getElementById("private-checkbox").checked;
+
+      if(!name || !url || !category){
+        let errorMessage = "";
+        if(!name && !url) errorMessage = "请输入名称和URL";
+        else if(!name) errorMessage = "请输入名称";
+        else if(!url) errorMessage = "请输入URL";
+        await customAlert(errorMessage, "编辑卡片");
+        if(!name) document.getElementById("name-input").focus();
+        else if(!url) document.getElementById("url-input").focus();
+        return;
+      }
+
+      const normalizedUrl = url.toLowerCase();
+      const allLinks = publicLinks.concat(privateLinks);
+      const isUrlExists = allLinks.some(function(l){
+        return (l.url || "").toLowerCase() === normalizedUrl && l.url !== oldLink.url;
+      });
+      if(isUrlExists){
+        await customAlert("该URL已存在，请勿重复添加", "编辑卡片");
+        document.getElementById("url-input").focus();
+        return;
+      }
+
+      const updatedLink = { name: name, url: url, tips: tips, icon: icon, category: category, isPrivate: !!isPrivate };
+
+      try{
+        const list = oldLink.isPrivate ? privateLinks : publicLinks;
+        const index = list.findIndex(function(l){ return l.url === oldLink.url; });
+        if(index !== -1) list[index] = updatedLink;
+
+        links = isLoggedIn ? publicLinks.concat(privateLinks) : publicLinks;
+
+        await saveLinks();
+        renderSections();
+        hideAddDialog();
+        logAction("更新卡片", { oldUrl: oldLink.url, name: name, url: url, tips: tips, icon: icon, category: category, isPrivate: !!isPrivate });
+      }catch(e){
+        logAction("更新卡片失败", { error: "Update operation failed" });
+        await customAlert("更新卡片失败，请重试", "编辑卡片");
+      }
+    }
+
+    async function removeCard(card){
+      if(!await validateToken()) return;
+
+      const name = card.querySelector(".card-title").textContent;
+      const url = card.getAttribute("data-url");
+      const isPrivate = card.dataset.isPrivate === "true";
+
+      const confirmed = await customConfirm('确定要删除 "' + name + '" 吗？', "确定", "取消");
+      if(!confirmed) return;
+
+      links = links.filter(function(link){ return link.url !== url; });
+      if(isPrivate) privateLinks = privateLinks.filter(function(link){ return link.url !== url; });
+      else publicLinks = publicLinks.filter(function(link){ return link.url !== url; });
+
+      for(const key in categories){
+        categories[key] = categories[key].filter(function(link){ return link.url !== url; });
+      }
+
+      card.remove();
+      await saveLinks();
+      logAction("删除卡片", { name: name, url: url, isPrivate: isPrivate });
+    }
+
+    function toggleRemoveMode(){
+      removeMode = !removeMode;
+      document.querySelectorAll(".edit-btn").forEach(function(btn){ btn.style.display = removeMode ? "flex" : "none"; });
+      document.querySelectorAll(".delete-btn").forEach(function(btn){ btn.style.display = removeMode ? "flex" : "none"; });
+
+      document.getElementById("custom-tooltip").style.display = "none";
+      document.querySelectorAll(".card").forEach(function(card){
+        if(removeMode) card.classList.add("no-hover");
+        else card.classList.remove("no-hover");
+      });
+
+      logAction("切换编辑卡片模式", { removeMode: removeMode });
+    }
+
+    /* ================= 拖拽排序 ================= */
+    let draggedCard = null;
+    let touchStartX, touchStartY;
+
+    function touchStart(event){
+      if(!isAdmin) return;
+      draggedCard = event.target.closest(".card");
+      if(!draggedCard) return;
+
+      event.preventDefault();
+      const touch = event.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+
+      draggedCard.classList.add("dragging");
+      document.addEventListener("touchmove", touchMove, { passive:false });
+      document.addEventListener("touchend", touchEnd);
+    }
+
+    function touchMove(event){
+      if(!draggedCard) return;
+      event.preventDefault();
+
+      const touch = event.touches[0];
+      const currentX = touch.clientX;
+      const currentY = touch.clientY;
+
+      const deltaX = currentX - touchStartX;
+      const deltaY = currentY - touchStartY;
+      draggedCard.style.transform = "translate(" + deltaX + "px, " + deltaY + "px)";
+
+      const target = findCardUnderTouch(currentX, currentY);
+      if(target && target !== draggedCard){
+        const container = target.parentElement;
+        const rect = target.getBoundingClientRect();
+        if(currentX < rect.left + rect.width / 2) container.insertBefore(draggedCard, target);
+        else container.insertBefore(draggedCard, target.nextSibling);
+      }
+    }
+
+    function touchEnd(){
+      if(!draggedCard) return;
+      const card = draggedCard;
+      const targetCategory = card.closest(".card-container").id;
+      if(isAdmin && card){
+        updateCardCategory(card, targetCategory);
+        saveCardOrder().catch(function(){});
+      }
+      cleanupDragState();
+    }
+
+    function findCardUnderTouch(x, y){
+      const cards = document.querySelectorAll(".card:not(.dragging)");
+      return Array.prototype.slice.call(cards).find(function(card){
+        const rect = card.getBoundingClientRect();
+        return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+      });
+    }
+
+    function dragStart(event){
+      if(!isAdmin){ event.preventDefault(); return; }
+      draggedCard = event.target.closest(".card");
+      if(!draggedCard) return;
+      draggedCard.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "move";
+      logAction("开始拖拽卡片", { name: draggedCard.querySelector(".card-title").textContent });
+    }
+
+    function dragOver(event){
+      if(!isAdmin){ event.preventDefault(); return; }
+      event.preventDefault();
+      const target = event.target.closest(".card");
+      if(target && target !== draggedCard){
+        const container = target.parentElement;
+        const mouseX = event.clientX;
+        const rect = target.getBoundingClientRect();
+        if(mouseX < rect.left + rect.width / 2) container.insertBefore(draggedCard, target);
+        else container.insertBefore(draggedCard, target.nextSibling);
+      }
+    }
+
+    function drop(event){
+      if(!isAdmin){ event.preventDefault(); return; }
+      event.preventDefault();
+      const card = draggedCard;
+      const targetCategory = event.target.closest(".card-container").id;
+
+      validateToken().then(function(isValid){
+        if(isValid && card){
+          updateCardCategory(card, targetCategory);
+          saveCardOrder().catch(function(){});
+        }
+        cleanupDragState();
+      });
+    }
+
+    function dragEnd(){
+      if(draggedCard){
+        draggedCard.classList.remove("dragging");
+        logAction("拖拽卡片结束");
+      }
+    }
+
+    function cleanupDragState(){
+      if(draggedCard){
+        draggedCard.classList.remove("dragging");
+        draggedCard.style.transform = "";
+        draggedCard = null;
+      }
+      document.removeEventListener("touchmove", touchMove);
+      document.removeEventListener("touchend", touchEnd);
+      touchStartX = null; touchStartY = null;
+    }
+
+    function updateCardCategory(card, newCategory){
+      const cardUrl = card.getAttribute("data-url");
+      const isPrivate = card.dataset.isPrivate === "true";
+
+      const i1 = links.findIndex(function(l){ return l.url === cardUrl; });
+      if(i1 !== -1) links[i1].category = newCategory;
+
+      const arr = isPrivate ? privateLinks : publicLinks;
+      const i2 = arr.findIndex(function(l){ return l.url === cardUrl; });
+      if(i2 !== -1) arr[i2].category = newCategory;
+
+      card.dataset.category = newCategory;
+    }
+
+    document.addEventListener("DOMContentLoaded", function(){
+      document.querySelectorAll(".card-container").forEach(function(container){
+        container.addEventListener("touchstart", touchStart, { passive:false });
+      });
+    });
+
+    async function saveCardOrder(){
+      if(!await validateToken()) return;
+
+      const containers = document.querySelectorAll(".card-container");
+      const newPublicLinks = [];
+      const newPrivateLinks = [];
+      const newCategories = {};
+
+      containers.forEach(function(container){
+        const category = container.id;
+        newCategories[category] = [];
+
+        Array.prototype.slice.call(container.children).forEach(function(card){
+          const url = card.getAttribute("data-url");
+          const name = card.querySelector(".card-title").textContent;
+          const isPrivate = card.dataset.isPrivate === "true";
+          card.dataset.category = category;
+
+          const originalLink = links.find(function(l){ return l.url === url; });
+          const tips = originalLink && originalLink.tips ? originalLink.tips : "";
+          const icon = originalLink && originalLink.icon ? originalLink.icon : "";
+
+          const link = { name: name, url: url, tips: tips, icon: icon, category: category, isPrivate: isPrivate };
+          if(isPrivate) newPrivateLinks.push(link);
+          else newPublicLinks.push(link);
+
+          newCategories[category].push(link);
+        });
+      });
+
+      publicLinks.length = 0;
+      Array.prototype.push.apply(publicLinks, newPublicLinks);
+      privateLinks.length = 0;
+      Array.prototype.push.apply(privateLinks, newPrivateLinks);
+
+      Object.keys(categories).forEach(function(k){ delete categories[k]; });
+      Object.assign(categories, newCategories);
+
+      try{
+        const response = await fetch("/api/saveOrder", {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "Authorization": localStorage.getItem("authToken")
+          },
+          body: JSON.stringify({
+            userId:"testUser",
+            links: newPublicLinks.concat(newPrivateLinks),
+            categories: newCategories
+          })
+        });
+        const result = await response.json();
+        if(!result.success) throw new Error("Failed to save order");
+        logAction("保存卡片顺序", { publicCount: newPublicLinks.length, privateCount: newPrivateLinks.length, categoryCount: Object.keys(newCategories).length });
+      }catch(e){
+        logAction("保存顺序失败", { error: "Save order failed" });
+        await customAlert("保存顺序失败，请重试", "保存失败");
+      }
+    }
+
+    async function reloadCardsAsAdmin(){
+      document.querySelectorAll(".card-container").forEach(function(c){ c.innerHTML = ""; });
+      await loadLinks();
+      logAction("重新加载卡片（管理员模式）");
+    }
+
+    /* ================= 登录/设置 ================= */
+    async function handleLoginClick(){
+      if(isLoggedIn){
+        const confirmed = await customConfirm("确定要退出登录吗？", "确定", "取消");
+        if(confirmed) await logout();
+      }else{
+        showLoginModal();
+      }
+    }
+
+    function showLoginModal(){
+      document.getElementById("login-modal").style.display = "flex";
+      document.getElementById("login-password").focus();
+    }
+    function hideLoginModal(){
+      document.getElementById("login-modal").style.display = "none";
+      document.getElementById("login-password").value = "";
+    }
+
+    async function performLogin(){
+      const password = document.getElementById("login-password").value;
+      if(!password){
+        await customAlert("请输入密码", "提示");
+        return;
+      }
+      try{
+        const result = await verifyPassword(password);
+        if(result.valid){
+          isLoggedIn = true;
+          localStorage.setItem("authToken", result.token);
+          await loadLinks();
+          hideLoginModal();
+          updateLoginButton();
+          await customAlert("登录成功！", "登录");
+          logAction("登录成功");
+        }else{
+          await customAlert("密码错误", "登录失败");
+          logAction("登录失败", { reason: result.error || "密码错误" });
+        }
+      }catch(e){
+        console.error("Login error occurred");
+        await customAlert("登录过程出错，请重试", "错误");
+      }
+    }
+
+    async function logout(){
+      isLoggedIn = false;
+      isAdmin = false;
+      localStorage.removeItem("authToken");
+      links = publicLinks;
+      renderSections();
+      updateLoginButton();
+      await customAlert("退出登录成功！", "退出登录");
+      updateUIState();
+      logAction("退出登录");
+    }
+
+    function updateLoginButton(){
+      const loginBtn = document.getElementById("login-btn");
+      const adminBtn = document.getElementById("admin-btn");
+      if(isLoggedIn){
+        loginBtn.textContent = "退出登录";
+        adminBtn.style.display = "inline-block";
+        adminBtn.textContent = isAdmin ? "离开设置" : "设置";
+      }else{
+        loginBtn.textContent = "登录";
+        adminBtn.style.display = "none";
+      }
+    }
+
+    function openGitHub(){
+      window.open("https://github.com/hmhm2022/Nav-CF", "_blank");
+      logAction("访问GitHub仓库");
+    }
+
+    function toggleBookmarkSearch(){
+      const dropdown = document.getElementById("bookmark-search-dropdown");
+      const isVisible = dropdown.classList.contains("show");
+      if(isVisible) dropdown.classList.remove("show");
+      else{
+        dropdown.classList.add("show");
+        document.getElementById("bookmark-search-input").focus();
+      }
+    }
+
+    document.addEventListener("click", function(event){
+      const searchToggle = document.querySelector(".bookmark-search-toggle");
+      const dropdown = document.getElementById("bookmark-search-dropdown");
+      if(searchToggle && !searchToggle.contains(event.target)) dropdown.classList.remove("show");
+    });
+
+    document.getElementById("login-password").addEventListener("keypress", function(e){
+      if(e.key === "Enter") performLogin();
+    });
+
+    async function toggleAdminMode(){
+      const addRemoveControls = document.querySelector(".add-remove-controls");
+
+      if(!isAdmin && isLoggedIn){
+        if(!await validateToken()) return;
+
+        showLoading("正在进入设置模式...");
+
+        // 进入设置模式前自动备份（可选）
+        try{
+          const response = await fetch("/api/backupData", {
+            method:"POST",
+            headers:{
+              "Content-Type":"application/json",
+              "Authorization": localStorage.getItem("authToken")
+            },
+            body: JSON.stringify({ sourceUserId:"testUser" })
+          });
+          const result = await response.json();
+          if(result && result.success) logAction("数据备份成功", { backupId: result.backupId });
+          else throw new Error("备份失败");
+        }catch(e){
+          hideLoading();
+          const cont = await customConfirm("备份失败，是否仍要继续进入设置模式？", "是", "否");
+          if(!cont) return;
+          showLoading("正在进入设置模式...");
+        }
+
+        try{
+          isAdmin = true;
+          addRemoveControls.style.display = "flex";
+          await reloadCardsAsAdmin();
+          hideLoading();
+          await customAlert("准备设置分类和书签", "设置模式");
+          logAction("进入设置");
+        }finally{
+          hideLoading();
+        }
+      }else if(isAdmin){
+        isAdmin = false;
+        removeMode = false;
+        isEditCategoryMode = false;
+
+        const manageButton = document.querySelector(".category-manage-btn");
+        if(manageButton) manageButton.classList.remove("active");
+
+        addRemoveControls.style.display = "none";
+        await reloadCardsAsAdmin();
+        await customAlert("设置已保存", "设置完成");
+        logAction("离开设置");
+      }
+
+      updateLoginButton();
+      updateUIState();
+    }
+
+    /* ================= 主题 & 返回顶部 ================= */
+    function toggleTheme(){
+      isDarkTheme = !isDarkTheme;
+      if(isDarkTheme) document.body.classList.add("dark-theme");
+      else document.body.classList.remove("dark-theme");
+      logAction("切换主题", { isDarkTheme: isDarkTheme });
+    }
+
+    function scrollToTop(){
+      window.scrollTo({ top:0, behavior:"smooth" });
+      logAction("返回顶部");
+    }
+
+    function handleBackToTopVisibility(){
+      const btn = document.getElementById("back-to-top-btn");
+      if(!btn) return;
+      btn.style.display = window.scrollY > 300 ? "flex" : "none";
+    }
+    window.addEventListener("scroll", handleBackToTopVisibility);
+
+    /* ================= Tooltip（卡片tips） ================= */
+    function handleTooltipMouseMove(e, tips, adminMode){
+      const tooltip = document.getElementById("custom-tooltip");
+      if(!tips || adminMode){
+        tooltip.style.display = "none";
+        return;
+      }
+      if(tooltip.textContent !== tips) tooltip.textContent = tips;
+      tooltip.style.display = "block";
+
+      const offsetX = 15, offsetY = 10;
+      const rect = tooltip.getBoundingClientRect();
+      const pageWidth = window.innerWidth;
+      const pageHeight = window.innerHeight;
+
+      let left = e.pageX + offsetX;
+      let top = e.pageY + offsetY;
+
+      if(pageWidth - e.clientX < 200) left = e.pageX - rect.width - offsetX;
+      if(pageHeight - e.clientY < 100) top = e.pageY - rect.height - offsetY;
+
+      tooltip.style.left = left + "px";
+      tooltip.style.top = top + "px";
+    }
+    function handleTooltipMouseLeave(){
+      document.getElementById("custom-tooltip").style.display = "none";
+    }
+
+    /* ================= 书签搜索 ================= */
+    function searchBookmarks(query){
+      if(!query || query.trim() === ""){
+        hideSearchResults();
+        return;
+      }
+      query = query.toLowerCase().trim();
+      const sectionsContainer = document.getElementById("sections-container");
+      const matchedLinks = links.filter(function(link){
+        return (link.name || "").toLowerCase().indexOf(query) !== -1;
+      });
+
+      sectionsContainer.innerHTML = "";
+
+      const searchHeader = document.createElement("div");
+      searchHeader.className = "search-results-header";
+
+      const searchTitle = document.createElement("div");
+      searchTitle.className = "search-results-title";
+      searchTitle.textContent = "搜索结果 (" + matchedLinks.length + "个)";
+
+      const backButton = document.createElement("button");
+      backButton.className = "back-to-main";
+      backButton.textContent = "返回主页";
+      backButton.onclick = hideSearchResults;
+
+      searchHeader.appendChild(searchTitle);
+      searchHeader.appendChild(backButton);
+      sectionsContainer.appendChild(searchHeader);
+
+      if(matchedLinks.length === 0){
+        const noResults = document.createElement("div");
+        noResults.className = "no-search-results";
+        noResults.textContent = "没有找到匹配的书签";
+        sectionsContainer.appendChild(noResults);
+      }else{
+        const resultsSection = document.createElement("div");
+        resultsSection.className = "search-results-section";
+        const cardContainer = document.createElement("div");
+        cardContainer.className = "card-container";
+        matchedLinks.forEach(function(link){ createCard(link, cardContainer); });
+        resultsSection.appendChild(cardContainer);
+        sectionsContainer.appendChild(resultsSection);
+      }
+
+      isShowingSearchResults = true;
+      const cat = document.getElementById("category-buttons-container");
+      if(cat) cat.style.display = "none";
+
+      logAction("执行书签搜索", { query: query, resultCount: matchedLinks.length });
+    }
+
+    function hideSearchResults(){
+      isShowingSearchResults = false;
+      document.getElementById("bookmark-search-input").value = "";
+      renderSections();
+      const cat = document.getElementById("category-buttons-container");
+      if(cat) cat.style.display = "flex";
+      renderCategoryButtons();
+    }
+
+    document.getElementById("bookmark-search-input").addEventListener("keypress", function(e){
+      if(e.key === "Enter"){
+        const query = document.getElementById("bookmark-search-input").value;
+        searchBookmarks(query);
+        document.getElementById("bookmark-search-dropdown").classList.remove("show");
+      }
+    });
+
+    document.getElementById("bookmark-search-input").addEventListener("input", function(e){
+      const query = e.target.value;
+      if(query.trim() === "") hideSearchResults();
+      else searchBookmarks(query);
+    });
+
+    /* ================= Token 校验（前端） ================= */
+    async function validateToken(){
+      const token = localStorage.getItem("authToken");
+      if(!token){
+        isLoggedIn = false;
+        updateUIState();
+        return false;
+      }
+
+      try{
+        const response = await fetch("/api/getLinks?userId=testUser", { headers: { "Authorization": token } });
+        if(response.status === 401){
+          await resetToLoginState("token已过期，请重新登录");
+          return false;
+        }
+        isLoggedIn = true;
+        updateUIState();
+        return true;
+      }catch(e){
+        console.error("Token validation failed");
+        return false;
+      }
+    }
+
+    async function resetToLoginState(message){
+      if(message && message.trim() !== "") await customAlert(message, "登录状态");
+
+      cleanupDragState();
+
+      localStorage.removeItem("authToken");
+      isLoggedIn = false;
+      isAdmin = false;
+      removeMode = false;
+      isEditCategoryMode = false;
+
+      updateLoginButton();
+      updateUIState();
+      links = publicLinks;
+      renderSections();
+
+      const addRemoveControls = document.querySelector(".add-remove-controls");
+      if(addRemoveControls) addRemoveControls.style.display = "none";
+
+      document.querySelectorAll(".delete-btn").forEach(function(btn){ btn.style.display = "none"; });
+      document.querySelectorAll(".delete-category-btn").forEach(function(btn){ btn.style.display = "none"; });
+      document.querySelectorAll(".edit-category-btn").forEach(function(btn){ btn.style.display = "none"; });
+      document.querySelectorAll(".move-category-btn").forEach(function(btn){ btn.style.display = "none"; });
+
+      const manageButton = document.querySelector(".category-manage-btn");
+      if(manageButton) manageButton.classList.remove("active");
+
+      const dialogOverlay = document.getElementById("dialog-overlay");
+      if(dialogOverlay) dialogOverlay.style.display = "none";
+      const loginModal = document.getElementById("login-modal");
+      if(loginModal) loginModal.style.display = "none";
+
+      const adminBtn = document.getElementById("admin-btn");
+      if(adminBtn) adminBtn.style.display = "none";
+    }
+
+    async function verifyPassword(inputPassword){
+      const response = await fetch("/api/verifyPassword", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ password: inputPassword })
+      });
+      return await response.json();
+    }
+
+    /* ================= 自定义 Alert / Confirm ================= */
+    function customAlert(message, title, confirmText){
+      title = title || "提示";
+      confirmText = confirmText || "确定";
+      return new Promise(function(resolve){
+        const overlay = document.getElementById("custom-alert-overlay");
+        const titleEl = document.getElementById("custom-alert-title");
+        const contentEl = document.getElementById("custom-alert-content");
+        const confirmBtn = document.getElementById("custom-alert-confirm");
+
+        titleEl.textContent = title;
+        contentEl.textContent = message;
+        confirmBtn.textContent = confirmText;
+        overlay.style.display = "flex";
+
+        const handleConfirm = function(){
+          overlay.style.display = "none";
+          confirmBtn.removeEventListener("click", handleConfirm);
+          document.removeEventListener("keydown", handleKeyDown);
+          resolve();
+        };
+
+        const handleKeyDown = function(e){
+          if(e.key === "Escape") handleConfirm();
+        };
+
+        confirmBtn.addEventListener("click", handleConfirm);
+        document.addEventListener("keydown", handleKeyDown);
+
+        overlay.addEventListener("click", function(e){
+          if(e.target === overlay) handleConfirm();
+        });
+      });
+    }
+
+    function customConfirm(message, okText, cancelText){
+      okText = okText || "确定";
+      cancelText = cancelText || "取消";
+      return new Promise(function(resolve){
+        const overlay = document.getElementById("custom-confirm-overlay");
+        const messageEl = document.getElementById("custom-confirm-message");
+        const okBtn = document.getElementById("custom-confirm-ok");
+        const cancelBtn = document.getElementById("custom-confirm-cancel");
+
+        messageEl.textContent = message;
+        okBtn.textContent = okText;
+        cancelBtn.textContent = cancelText;
+        overlay.style.display = "flex";
+
+        const cleanup = function(){
+          overlay.style.display = "none";
+          document.removeEventListener("keydown", handleKeyDown);
+          okBtn.onclick = null;
+          cancelBtn.onclick = null;
+          overlay.onclick = null;
+        };
+
+        const handleConfirm = function(result){
+          cleanup();
+          resolve(result);
+        };
+
+        const handleKeyDown = function(e){
+          if(e.key === "Enter") handleConfirm(true);
+          if(e.key === "Escape") handleConfirm(false);
+        };
+
+        okBtn.onclick = function(){ handleConfirm(true); };
+        cancelBtn.onclick = function(){ handleConfirm(false); };
+        document.addEventListener("keydown", handleKeyDown);
+        overlay.onclick = function(e){ if(e.target === overlay) handleConfirm(false); };
+      });
+    }
+
+    function showCategoryDialog(title, defaultValue){
+      defaultValue = defaultValue || "";
+      return new Promise(function(resolve){
+        const dialog = document.getElementById("category-dialog");
+        const input = document.getElementById("category-name-input");
+        const titleEl = document.getElementById("category-dialog-title");
+        const confirmBtn = document.getElementById("category-confirm-btn");
+        const cancelBtn = document.getElementById("category-cancel-btn");
+
+        titleEl.textContent = title;
+        input.value = defaultValue;
+
+        dialog.style.display = "flex";
+        setTimeout(function(){ input.focus(); }, 50);
+
+        const cleanup = function(){
+          dialog.style.display = "none";
+          document.removeEventListener("keydown", handleKeyDown);
+          confirmBtn.onclick = null;
+          cancelBtn.onclick = null;
+          dialog.onclick = null;
+        };
+
+        const handleConfirm = function(){
+          const value = input.value.trim();
+          if(value){
+            cleanup();
+            resolve(value);
+          }else{
+            input.focus();
+          }
+        };
+
+        const handleCancel = function(){
+          cleanup();
+          resolve(null);
+        };
+
+        const handleKeyDown = function(e){
+          if(e.key === "Enter"){ e.preventDefault(); handleConfirm(); }
+          else if(e.key === "Escape"){ handleCancel(); }
+        };
+
+        confirmBtn.onclick = handleConfirm;
+        cancelBtn.onclick = handleCancel;
+        document.addEventListener("keydown", handleKeyDown);
+        dialog.onclick = function(e){ if(e.target === dialog) handleCancel(); };
+      });
+    }
+
+    /* ================= 加载遮罩 ================= */
+    function showLoading(message){
+      message = message || "加载中，请稍候...";
+      const mask = document.getElementById("loading-mask");
+      mask.querySelector("p").textContent = message;
+      mask.style.display = "flex";
+    }
+    function hideLoading(){
+      document.getElementById("loading-mask").style.display = "none";
+    }
+
+    /* ================= 导出/导入（后台数据库） ================= */
+    async function exportData(){
+      if(!await validateToken()) return;
+      try{
+        showLoading("正在导出数据...");
+        const res = await fetch("/api/exportData?userId=testUser", {
+          method:"GET",
+          headers:{ "Authorization": localStorage.getItem("authToken") }
+        });
+        if(!res.ok){
+          hideLoading();
+          await customAlert("导出失败，请重试", "导出");
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "cardtab_export.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        hideLoading();
+        logAction("导出数据");
+      }catch(e){
+        hideLoading();
+        await customAlert("导出失败，请重试", "导出");
+      }
+    }
+
+    function triggerImport(){
+      const input = document.getElementById("import-file");
+      input.value = "";
+      input.click();
+    }
+
+    document.getElementById("import-file").addEventListener("change", async function(e){
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      if(!await validateToken()) return;
+
+      const confirmed = await customConfirm("导入会覆盖当前所有数据，确定继续吗？", "确定", "取消");
+      if(!confirmed) return;
+
+      try{
+        showLoading("正在导入数据...");
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        const res = await fetch("/api/importData", {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "Authorization": localStorage.getItem("authToken")
+          },
+          body: JSON.stringify({ userId:"testUser", data: data })
+        });
+
+        if(!res.ok){
+          let msg = "导入失败：数据格式不对或服务端错误";
+          try{
+            const j = await res.json();
+            if (j && j.message) msg = "导入失败：" + j.message;
+          }catch(_e){}
+          hideLoading();
+          await customAlert(msg, "导入");
+          return;
+        }
+
+        hideLoading();
+        await customAlert("导入成功！页面将刷新数据", "导入");
+        await loadLinks();
+        logAction("导入数据");
+      }catch(err){
+        hideLoading();
+        await customAlert("导入失败：" + (err && err.message ? err.message : "请确认文件是正确的 JSON 文件"), "导入");
+      }
+    });
+
+    /* ================= 初始化 ================= */
+    document.addEventListener("DOMContentLoaded", async function(){
+      try{
+        await validateToken();
+        updateLoginButton();
+        await loadLinks();
+        setTimeout(setActiveCategoryButtonByVisibility, 500);
+        setTimeout(handleBackToTopVisibility, 100);
+      }catch(e){
+        console.error("Initialization failed");
+      }
+    });
   
+/* ===== 北京时间 ===== */
+function updateBeijingTime(){
+  const now = new Date();
+  const bj = new Date(now.toLocaleString("en-US",{timeZone:"Asia/Shanghai"}));
+  const week=["星期日","星期一","星期二","星期三","星期四","星期五","星期六"];
+  document.getElementById("site-datetime").textContent =
+    bj.getFullYear()+"年"+(bj.getMonth()+1)+"月"+bj.getDate()+"日 "+
+    week[bj.getDay()]+" "+bj.toLocaleTimeString("zh-CN",{hour12:false});
+}
+setInterval(updateBeijingTime,1000);
+updateBeijingTime();
+
+/* ===== 标题可编辑并保存 ===== */
+const titleEl=document.getElementById("site-title");
+const savedTitle=localStorage.getItem("siteTitle");
+if(savedTitle) titleEl.textContent=savedTitle;
+
+if(isAdmin){
+  titleEl.title="点击修改标题";
+  titleEl.onclick=()=>{
+    const v=prompt("请输入站点标题",titleEl.textContent);
+    if(v){
+      titleEl.textContent=v;
+      localStorage.setItem("siteTitle",v);
+    }
+  };
+}
+
+
+/* ===== 后台：修改站点名称 ===== */
+function editSiteTitle(){
+  const titleEl = document.getElementById("site-title");
+  if(!titleEl) return;
+  const v = prompt("请输入站点名称", titleEl.textContent);
+  if(v){
+    titleEl.textContent = v;
+    localStorage.setItem("siteTitle", v);
+  }
+}
+
+
+/* ===== 自动抓取网站描述 ===== */
+async function fetchSiteDescription(url){
+  try{
+    const res = await fetch("/api/fetchMeta?url="+encodeURIComponent(url));
+    const data = await res.json();
+    return data.description || "";
+  }catch(e){ return ""; }
+}
+
+document.getElementById("url-input")?.addEventListener("blur", async function(){
+  const url = this.value;
+  if(!url) return;
+  const tipsInput = document.getElementById("tips-input");
+  if(tipsInput && !tipsInput.value){
+    tipsInput.value = await fetchSiteDescription(url);
+  }
+});
+
+
+/* ===== AI 自动生成名称 / 描述 / 图标 ===== */
+document.getElementById("ai-generate-btn")?.addEventListener("click", async ()=>{
+  const url = document.getElementById("url-input")?.value;
+  if(!url){
+    alert("请先输入网址");
+    return;
+  }
+  try{
+    const res = await fetch("/api/aiGenerate?url="+encodeURIComponent(url));
+    const data = await res.json();
+
+    if(data.name && document.getElementById("name-input")){
+      document.getElementById("name-input").value = data.name;
+    }
+    if(data.description && document.getElementById("tips-input")){
+      document.getElementById("tips-input").value = data.description;
+    }
+    if(data.icon && document.getElementById("icon-input")){
+      document.getElementById("icon-input").value = data.icon;
+    }
+  }catch(e){
+    console.error("AI 生成失败");
+  }
+});
+
+
+/* ===== 后台面板拉出/自动收起 ===== */
+function openAdminPanel(){
+  const panel = document.querySelector(".add-remove-controls");
+  if(panel) panel.classList.add("open");
+}
+
+document.addEventListener("click", (e) => {
+  const panel = document.querySelector(".add-remove-controls");
+  const handle = document.querySelector(".admin-panel-handle");
+  if(!panel || !handle) return;
+
+  if(panel.classList.contains("open")){
+    if(!panel.contains(e.target) && !handle.contains(e.target)){
+      panel.classList.remove("open");
+    }
+  }
+});
+
+
+/* ===== FREE AI 前端兜底填充 ===== */
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("ai-generate-btn");
+  if(!btn) return;
+
+  btn.addEventListener("click", async () => {
+    const url = document.getElementById("url-input")?.value;
+    if(!url){ alert("请先输入网址"); return; }
+
+    btn.disabled = true;
+    btn.textContent = "AI...";
+
+    try{
+      const res = await fetch("/api/aiGenerate",{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+
+      if(data.name && !document.getElementById("name-input").value){
+        document.getElementById("name-input").value = data.name;
+      }
+      if(data.desc){
+        document.getElementById("tips-input").value = data.desc;
+      }
+    }catch(e){
+      
+    }finally{
+      btn.disabled = false;
+      btn.textContent = "AI";
+    }
+  });
+});
+
+</script>
+
+<div class="admin-panel-handle" onclick="openAdminPanel()" title="后台操作"></div>
+
+
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-  // 只有登录后才显示“点我”提示
-  const isLoggedIn = !!localStorage.getItem("authToken");
-  if (!isLoggedIn) return;
-
   const handle = document.querySelector(".admin-panel-handle");
   if (!handle) return;
 
@@ -1292,7 +2977,6 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("resize", syncPosition);
 });
 </script>
-
 
 </body>
 </html>
