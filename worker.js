@@ -86,17 +86,24 @@ export default {
       }
 
       /* ---------- Worker SMART FALLBACK ---------- */
+      
       let fallbackDesc = "官方网站入口";
+
+      if (domain === "google") fallbackDesc = "搜索与地图服务平台";
+      if (domain === "maps") fallbackDesc = "全球地图与导航服务";
       if (domain === "uptodown") fallbackDesc = "应用与软件下载平台";
       if (domain === "github") fallbackDesc = "开源代码托管平台";
       if (domain === "cloudflare") fallbackDesc = "网络与安全服务平台";
-      if (domain === "google") fallbackDesc = "搜索与互联网服务";
+      if (domain === "youtube") fallbackDesc = "在线视频播放平台";
+      if (domain === "twitter" || domain === "x") fallbackDesc = "社交媒体交流平台";
+      if (domain === "facebook") fallbackDesc = "社交网络互动平台";
 
       return Response.json({
         name: domain.charAt(0).toUpperCase() + domain.slice(1),
         desc: fallbackDesc,
         source: "fallback"
       });
+);
     }
 
     /* ================= PAGE ================= */
@@ -1009,7 +1016,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
 }
 
 
-/* ===== 侧边后台菜单提示：点我（闪烁） ===== */
+/* ===== 侧边后台菜单提示：点我②（闪烁） ===== */
 @keyframes tapMeBlink {
   0%   { opacity: .25; }
   50%  { opacity: 1; }
@@ -1044,6 +1051,35 @@ const HTML_CONTENT = `<!DOCTYPE html>
   }
 }
 
+</style>
+<style>
+/* ===== 侧边后台菜单提示：点我②（首次闪烁） ===== */
+@keyframes tapMeBlink {
+  0%   { opacity: .25; }
+  50%  { opacity: 1; }
+  100% { opacity: .25; }
+}
+
+.admin-panel-hint {
+  position: fixed;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  animation: tapMeBlink 1.2s ease-in-out infinite;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 3000;
+}
+
+@media (prefers-color-scheme: light) {
+  .admin-panel-hint { background:#111; color:#fff; }
+}
+@media (prefers-color-scheme: dark) {
+  .admin-panel-hint { background:#fff; color:#111; }
+}
 </style>
 </head>
 <body>
@@ -2975,7 +3011,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const hint = document.createElement("span");
   hint.className = "admin-panel-hint";
-  hint.textContent = "点我";
+  hint.textContent = "点我②②";
 
   document.body.appendChild(hint);
 
@@ -2987,6 +3023,46 @@ document.addEventListener("DOMContentLoaded", () => {
   syncPosition();
   window.addEventListener("scroll", syncPosition);
   window.addEventListener("resize", syncPosition);
+});
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const isLoggedIn = !!localStorage.getItem("authToken");
+  if (!isLoggedIn) return;
+
+  // ① 登录后把“设置”改成“设置①”
+  const settingBtn = Array.from(document.querySelectorAll("button, a"))
+    .find(el => el.textContent.trim() === "设置");
+  if (settingBtn) {
+    settingBtn.textContent = "设置①";
+  }
+
+  // ② 只在首次使用前显示“点我②”闪烁提示
+  if (localStorage.getItem("adminHintSeen") === "1") return;
+
+  const handle = document.querySelector(".admin-panel-handle");
+  if (!handle) return;
+
+  const hint = document.createElement("span");
+  hint.className = "admin-panel-hint";
+  hint.textContent = "点我②②";
+  document.body.appendChild(hint);
+
+  const syncPosition = () => {
+    const rect = handle.getBoundingClientRect();
+    hint.style.top = (rect.top + rect.height / 2) + "px";
+  };
+  syncPosition();
+  window.addEventListener("scroll", syncPosition);
+  window.addEventListener("resize", syncPosition);
+
+  // 用户点开一次后台菜单后，永久关闭提示
+  handle.addEventListener("click", () => {
+    localStorage.setItem("adminHintSeen", "1");
+    hint.remove();
+  }, { once: true });
 });
 </script>
 
