@@ -1,4 +1,4 @@
-// Nav-CF Worker - FINAL CLEAN FULL VERSION
+// Nav-CF Worker - FINAL STABLE AI VERSION
 // KV Binding: CARD_ORDER
 // Env:
 // - ADMIN_PASSWORD
@@ -6,7 +6,6 @@
 
 import { SEED_DATA, SEED_USER_ID } from "./db.js";
 
-/* ================= 工具函数 ================= */
 function cleanDomain(hostname) {
   return hostname
     .replace(/^www\./, "")
@@ -14,13 +13,12 @@ function cleanDomain(hostname) {
     .split(".")[0];
 }
 
-/* ================= Worker 主体 ================= */
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     /* ======================================================
-       AI GENERATE — FIRST ROUTE, NO AUTH, OPENAI FIRST
+       AI GENERATE — FIRST ROUTE, NO AUTH, OPENAI FIRST (STABLE)
        ====================================================== */
     if (url.pathname === "/api/aiGenerate") {
       let targetUrl = "";
@@ -47,12 +45,12 @@ export default {
       const aiKey = env.AI_API_KEY || "";
       const canUseAI = aiKey.startsWith("sk-") && !aiKey.includes("xxxx");
 
-      /* ---------- OpenAI 优先 ---------- */
+      /* ---------- OpenAI FIRST (temperature=0 for stability) ---------- */
       if (canUseAI) {
         try {
           const prompt = `你是一个中文网站导航编辑。
 请根据网址生成导航信息：
-- 名称：完整、自然
+- 名称：完整、自然，不要简称
 - 描述：10~15字，概括主要用途
 
 网址：${targetUrl}
@@ -68,7 +66,7 @@ export default {
             body: JSON.stringify({
               model: "gpt-4o-mini",
               messages: [{ role: "user", content: prompt }],
-              temperature: 0.3
+              temperature: 0.0
             })
           });
 
@@ -87,11 +85,12 @@ export default {
         } catch {}
       }
 
-      /* ---------- Worker 智能兜底 ---------- */
+      /* ---------- Worker SMART FALLBACK ---------- */
       let fallbackDesc = "官方网站入口";
       if (domain === "uptodown") fallbackDesc = "应用与软件下载平台";
       if (domain === "github") fallbackDesc = "开源代码托管平台";
       if (domain === "cloudflare") fallbackDesc = "网络与安全服务平台";
+      if (domain === "google") fallbackDesc = "搜索与互联网服务";
 
       return Response.json({
         name: domain.charAt(0).toUpperCase() + domain.slice(1),
@@ -100,7 +99,7 @@ export default {
       });
     }
 
-    /* ================= 页面 ================= */
+    /* ================= PAGE ================= */
     if (url.pathname === "/") {
       return new Response(HTML_CONTENT, {
         headers: { "content-type": "text/html; charset=UTF-8" }
