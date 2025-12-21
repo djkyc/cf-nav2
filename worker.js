@@ -1199,6 +1199,14 @@ body.dark-theme .admin-panel-hint{
   background:#fff;
   color:#111;
 }
+
+/* ===== 未登录：后台面板完全隐藏 ===== */
+body:not(.logged-in) .add-remove-controls,
+body:not(.logged-in) .admin-panel-handle,
+body:not(.logged-in) .admin-panel-hint {
+  display: none !important;
+}
+
 </style>
 </head>
 <body>
@@ -1475,6 +1483,19 @@ body.dark-theme .admin-panel-hint{
     setActiveEngine(currentEngine);
 
     /* ================= 全局状态 ================= */
+
+  // 页面初始化：默认未登录
+  document.body.classList.remove("logged-in");
+
+  function onLoginSuccess(){
+    isLoggedIn = true;
+    isAdmin = true;
+    document.body.classList.add("logged-in");
+    const adminBtn = document.getElementById("admin-btn");
+    if(adminBtn) adminBtn.style.display = "inline-block";
+    loadLinks();
+  }
+
     let publicLinks = [];
     let privateLinks = [];
     let isAdmin = false;
