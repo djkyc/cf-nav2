@@ -994,6 +994,42 @@ const HTML_CONTENT = `<!DOCTYPE html>
   z-index: 2100;
 }
 
+
+/* ===== 侧边后台菜单提示：点我（闪烁） ===== */
+@keyframes tapMeBlink {
+  0%   { opacity: .25; }
+  50%  { opacity: 1; }
+  100% { opacity: .25; }
+}
+
+.admin-panel-hint {
+  position: fixed;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  animation: tapMeBlink 1.2s ease-in-out infinite;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 3000;
+}
+
+@media (prefers-color-scheme: light) {
+  .admin-panel-hint {
+    background: #111;
+    color: #fff;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .admin-panel-hint {
+    background: #fff;
+    color: #111;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -2915,6 +2951,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
 <div class="admin-panel-handle" onclick="openAdminPanel()" title="后台操作"></div>
 
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const handle = document.querySelector(".admin-panel-handle");
+  if (!handle) return;
+
+  if (document.querySelector(".admin-panel-hint")) return;
+
+  const hint = document.createElement("span");
+  hint.className = "admin-panel-hint";
+  hint.textContent = "点我";
+
+  document.body.appendChild(hint);
+
+  const syncPosition = () => {
+    const rect = handle.getBoundingClientRect();
+    hint.style.top = (rect.top + rect.height / 2) + "px";
+  };
+
+  syncPosition();
+  window.addEventListener("scroll", syncPosition);
+  window.addEventListener("resize", syncPosition);
+});
+</script>
+
 </body>
 </html>
 `;
@@ -3012,4 +3073,3 @@ async function validateAdminToken(authToken, env) {
   if (!validation.isValid) return validation;
   return { isValid: true, isAdmin: true };
 }
-
