@@ -1139,7 +1139,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
 /* 右侧边缘拉出按钮（仅登录后显示；深色模式更醒目） */
 .admin-panel-handle{
-  display:none;
   position: fixed;
   right: 0;
   top: 55%;
@@ -2395,8 +2394,6 @@ body.dark-theme .admin-panel-hint{
       document.querySelectorAll(".card-container").forEach(function(container){
         container.addEventListener("touchstart", touchStart, { passive:false });
       });
-   
-      try{ updateAdminPanelEntry(); }catch(e){}
     });
 
     async function saveCardOrder(){
