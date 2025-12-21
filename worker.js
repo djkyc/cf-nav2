@@ -1199,6 +1199,12 @@ body.dark-theme .admin-panel-hint{
   background:#fff;
   color:#111;
 }
+
+/* 未登录时隐藏右侧后台拉出按钮与提示；登录后显示 */
+.admin-panel-handle, .admin-panel-hint{ display:none; }
+body.logged-in .admin-panel-handle{ display:block; }
+body.logged-in .admin-panel-hint{ display:inline-block; }
+
 </style>
 </head>
 <body>
@@ -2523,13 +2529,26 @@ if(window.PointerEvent){
     function updateLoginButton(){
       const loginBtn = document.getElementById("login-btn");
       const adminBtn = document.getElementById("admin-btn");
+
+      // 右侧后台拉出按钮 & 提示（仅登录后显示）
+      const handle = document.querySelector(".admin-panel-handle");
+      const hint = document.querySelector(".admin-panel-hint");
+
       if(isLoggedIn){
         loginBtn.textContent = "退出登录";
         adminBtn.style.display = "inline-block";
         adminBtn.textContent = isAdmin ? "离开设置" : "设置①";
+
+        document.body.classList.add("logged-in");
+        if(handle) handle.style.display = "block";
+        if(hint) hint.style.display = "inline-block";
       }else{
         loginBtn.textContent = "登录";
         adminBtn.style.display = "none";
+
+        document.body.classList.remove("logged-in");
+        if(handle) handle.style.display = "none";
+        if(hint) hint.style.display = "none";
       }
     }
 
@@ -3198,7 +3217,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </script>
 
-<div class="admin-panel-handle" onclick="openAdminPanel()" title="后台操作"></div>
+<div class="admin-panel-handle" onclick="openAdminPanel()" title="后台操作" style="display:none;"></div>
 
 
 <script>
