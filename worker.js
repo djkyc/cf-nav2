@@ -112,6 +112,18 @@ export default {
       return Response.json(data);
     }
 
+    
+    /* ================= VERIFY PASSWORD ================= */
+    if (url.pathname === "/api/verifyPassword" && request.method === "POST") {
+      let body = {};
+      try { body = await request.json(); } catch {}
+      const pwd = body.password || "";
+      if (pwd === env.ADMIN_PASSWORD) {
+        return Response.json({ valid: true, token: env.ADMIN_PASSWORD });
+      }
+      return Response.json({ valid: false }, { status: 401 });
+    }
+
     if (url.pathname === "/api/saveOrder") {
       let auth = request.headers.get("Authorization");
 let body = {};
