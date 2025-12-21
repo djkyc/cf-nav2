@@ -1184,6 +1184,9 @@ body.dark-theme .admin-panel-handle::after{
   100% { opacity: .25; }
 }
 
+/* 顶部设置①按钮闪烁（首次引导） */
+.admin-btn.blink-setting{ animation: tapMeBlink 1.2s ease-in-out infinite; }
+
 .admin-panel-hint {
   position: fixed;
   right: 34px;
@@ -1193,7 +1196,9 @@ body.dark-theme .admin-panel-handle::after{
   padding: 4px 6px;
   border-radius: 6px;
   animation: tapMeBlink 1.2s ease-in-out infinite;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
   white-space: nowrap;
   z-index: 3000;
   background:#111;
@@ -2522,9 +2527,18 @@ body.dark-theme .admin-panel-hint{
         loginBtn.textContent = "退出登录";
         adminBtn.style.display = "inline-block";
         adminBtn.textContent = isAdmin ? "离开设置" : "设置①";
+        // 设置①首次闪烁引导：点击一次后不再闪烁
+        try{
+          const dismissed = localStorage.getItem("adminSettingBlinkDismissed")==="1";
+          if(!isAdmin && !dismissed) adminBtn.classList.add("blink-setting");
+          else adminBtn.classList.remove("blink-setting");
+        }catch(e){
+          if(!isAdmin) adminBtn.classList.add("blink-setting");
+        }
       }else{
         loginBtn.textContent = "登录";
         adminBtn.style.display = "none";
+        adminBtn.classList.remove("blink-setting");
       }
     }
 
@@ -2559,12 +2573,15 @@ body.dark-theme .admin-panel-hint{
       if(!isAdmin && isLoggedIn){
         if(!await validateToken()) return;
 
+        // 点击一次“设置①”后不再闪烁
+        try{ localStorage.setItem("adminSettingBlinkDismissed","1"); }catch(e){}
+
         showLoading("正在进入设置模式...");
 
 
         try{
           isAdmin = true;
-          try{ localStorage.setItem("adminPanelHintDismissed","1"); }catch(e){}
+          // 进入设置不再自动标记“点我②”已看过（改为点击提示本身才消失）
           addRemoveControls.style.display = "flex";
           addRemoveControls.classList.add("open");
           await reloadCardsAsAdmin();
@@ -3120,7 +3137,7 @@ function updateAdminPanelEntry(){
 
   // 提示：仅登录且未进入设置、且未被“看过”才显示
   const existingHint = document.querySelector(".admin-panel-hint");
-  const shouldShowHint = isLoggedIn && !isAdmin && !dismissed && !(panel && panel.classList.contains("open"));
+  const shouldShowHint = isLoggedIn && !isAdmin && !dismissed;
 
   if(shouldShowHint){
     const hint = existingHint || document.createElement("span");
@@ -3128,27 +3145,15 @@ function updateAdminPanelEntry(){
       hint.className = "admin-panel-hint";
       hint.textContent = "点我②";
       document.body.appendChild(hint);
-      // 点击一次“点我②”后：不再提示，并直接打开侧边面板
-      hint.style.cursor = "pointer";
       if(!hint.__clickBound){
         hint.__clickBound = true;
-        hint.addEventListener("click", () => {
+        hint.addEventListener("click", ()=>{
           try{ localStorage.setItem("adminPanelHintDismissed","1"); }catch(e){}
-          openAdminPanel();
+          updateAdminPanelEntry();
         }, { once: true });
       }
     }else{
       hint.style.display = "inline-block";
-    }
-
-    // 确保复用节点也能点击消失
-    hint.style.cursor = "pointer";
-    if(!hint.__clickBound){
-      hint.__clickBound = true;
-      hint.addEventListener("click", () => {
-        try{ localStorage.setItem("adminPanelHintDismissed","1"); }catch(e){}
-        openAdminPanel();
-      }, { once: true });
     }
 
     const syncPosition = () => {
@@ -3181,7 +3186,7 @@ function updateAdminPanelEntry(){
 function openAdminPanel(){
   const panel = document.querySelector(".add-remove-controls");
   if(panel) panel.classList.add("open");
-  // 不在这里标记“已看过提示”，提示只在点击“点我②”时消失
+  // 打开面板不再自动标记“点我②”已看过（改为点击提示本身才消失）
   updateAdminPanelEntry();
 }
 
