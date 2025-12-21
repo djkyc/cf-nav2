@@ -1483,18 +1483,21 @@ body:not(.logged-in) .admin-panel-hint {
     setActiveEngine(currentEngine);
 
     /* ================= 全局状态 ================= */
+    /* ===== 登录态 UI 同步（关键修复） ===== */
+    const __savedToken = localStorage.getItem("token");
+    if (__savedToken) {
+      document.body.classList.add("logged-in");
+      isLoggedIn = true;
+      isAdmin = true;
+    }
 
-  // 页面初始化：默认未登录
-  document.body.classList.remove("logged-in");
-
-  function onLoginSuccess(){
-    isLoggedIn = true;
-    isAdmin = true;
-    document.body.classList.add("logged-in");
-    const adminBtn = document.getElementById("admin-btn");
-    if(adminBtn) adminBtn.style.display = "inline-block";
-    loadLinks();
-  }
+    function __onLoginUISuccess() {
+      document.body.classList.add("logged-in");
+      isLoggedIn = true;
+      isAdmin = true;
+      const adminBtn = document.getElementById("admin-btn");
+      if (adminBtn) adminBtn.style.display = "inline-block";
+    }
 
     let publicLinks = [];
     let privateLinks = [];
