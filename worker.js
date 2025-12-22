@@ -128,8 +128,14 @@ export default {
       })();
 
       const domain = cleanDomain(hostname);
-      const aiKey = env.AI_API_KEY || "";
-      const canUseAI = aiKey.startsWith("sk-") && !aiKey.includes("xxxx");
+      // 默认占位 Key：用于一键部署时不配置也能正常运行（不会真的调用 OpenAI）
+      const DEFAULT_AI_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+
+      const aiKeyRaw = (env && typeof env.AI_API_KEY === "string") ? env.AI_API_KEY : "";
+      const aiKey = (aiKeyRaw && aiKeyRaw.trim()) ? aiKeyRaw.trim() : DEFAULT_AI_API_KEY;
+
+      // 只有当 Key 不是占位符时才启用 AI
+      const canUseAI = !!aiKey && aiKey !== DEFAULT_AI_API_KEY && !aiKey.includes("xxxxxxxx");
 
       if (canUseAI) {
         try {
@@ -405,7 +411,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       background-color:var(--primary);
       color:#fff;border:none;border-radius:4px;
       padding:8px 16px;font-size:13px;
-      cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease, border-color .18s ease;will-change:transform, box-shadow;
+      cursor:pointer;transition:all .3s ease;
       font-weight:500;
     }
     .admin-btn:hover,.login-btn:hover{
@@ -543,7 +549,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6" viewBox="0 0 12 6"><path fill="currentColor" d="M0 0l6 6 6-6z"/></svg>');
       background-repeat:no-repeat;
       background-position:right 10px center;
-      cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease, border-color .18s ease;will-change:transform, box-shadow;
+      cursor:pointer;transition:all .3s ease;
       border-radius:0;
     }
     select option{
@@ -653,9 +659,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       align-items:center;
       gap:10px;
     }
-        .admin-action-right{ width:100%; justify-content:space-between; }
-    .admin-action-right .admin-label{ flex:1; }
-.admin-label{
+    .admin-label{
       font-size:13px;
       font-weight:600;
       color:#1f2937;
@@ -745,7 +749,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       background:#fff;border-radius:8px;
       padding:12px;width:150px;
       box-shadow:0 3px 10px rgba(0,0,0,.06);
-      cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease, border-color .18s ease;will-change:transform, box-shadow;
+      cursor:pointer;transition:all .3s ease;
       position:relative;user-select:none;
       border-left:3px solid var(--primary);
       animation:fadeIn .3s ease forwards;
@@ -800,7 +804,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       position:fixed;display:none;z-index:99999;
       background:var(--primary);color:#fff;
       padding:6px 10px;border-radius:5px;font-size:12px;
-      pointer-events:none;max-width:300px;white-space:pre-wrap;will-change:transform;transform:translate3d(0,0,0);
+      pointer-events:none;max-width:300px;white-space:pre-wrap;
       box-shadow:0 2px 10px rgba(0,0,0,.2);
       transition:opacity .2s ease;
     }
@@ -1201,12 +1205,6 @@ body.dark-theme .admin-panel-hint{
   background:#fff;
   color:#111;
 }
-
-/* 未登录时隐藏右侧后台拉出按钮与提示；登录后显示 */
-.admin-panel-handle, .admin-panel-hint{ display:none; }
-body.logged-in .admin-panel-handle{ display:block; }
-body.logged-in .admin-panel-hint{ display:inline-block; }
-
 </style>
 </head>
 <body>
@@ -1260,15 +1258,15 @@ body.logged-in .admin-panel-hint{ display:inline-block; }
   <div class="content">
     <!-- 管理控制按钮 -->
     <div class="add-remove-controls">
-      <div class="admin-panel-title">后台操作</div>
-      <div class="admin-action admin-action-right">
-        <span class="admin-label">0.修改站点名称</span>
+      <div class="admin-panel-title">后台操作:</div>
+      <div class="admin-action">
         <button class="round-btn" onclick="editSiteTitle()" title="修改站点名称">
           <svg viewBox="0 0 48 48" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
             <path d="M6 42h36" stroke="white" stroke-width="4"/>
             <path d="M14 34l20-20 6 6-20 20H14v-6z" stroke="white" stroke-width="4" fill="none"/>
           </svg>
         </button>
+        <span class="admin-label">0.修改站点名称</span>
       </div>
 
 
@@ -1897,6 +1895,45 @@ body.logged-in .admin-panel-hint{ display:inline-block; }
     function isValidUrl(url){
       try{ new URL(url); return true; }catch(e){ return false; }
     }
+function getIconChoiceKey(link){
+      const u = (link && link.url) ? String(link.url) : "";
+      // 使用 URL 作为稳定 key，避免改数据结构
+      return "navcf:iconChoice:" + u;
+    }
+    function readIconChoice(link){
+      try{
+        const k = getIconChoiceKey(link);
+        const v = localStorage.getItem(k);
+        if(v === null || v === undefined || v === "") return null;
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? n : null;
+      }catch(e){
+        return null;
+      }
+    }
+    function writeIconChoice(link, idx){
+      try{
+        const k = getIconChoiceKey(link);
+        localStorage.setItem(k, String(idx));
+      }catch(e){}
+    }
+function getIconCandidates(link){
+      const candidates = [];
+      const iconUrl = (link && typeof link.icon === "string") ? link.icon.trim() : "";
+      if(iconUrl && isValidUrl(iconUrl)) candidates.push(iconUrl);
+
+      const domain = extractDomain((link && link.url) ? link.url : "").replace(/^www\./, "");
+      if(domain){
+        // 平台1：Google（PNG）
+        candidates.push("https://www.google.com/s2/favicons?sz=64&domain=" + domain);
+        // 平台2：DuckDuckGo（ICO）
+        candidates.push("https://icons.duckduckgo.com/ip3/" + domain + ".ico");
+        // 平台3：FaviconExtractor（可能为ICO/PNG）
+        candidates.push("https://www.faviconextractor.com/favicon/" + domain);
+      }
+      return candidates;
+    }
+
 
     function createCard(link, container){
       const card = document.createElement("div");
@@ -1920,16 +1957,58 @@ body.logged-in .admin-panel-hint{ display:inline-block; }
 
       const icon = document.createElement("img");
       icon.className = "card-icon";
-      icon.src = (!link.icon || typeof link.icon !== "string" || !link.icon.trim() || !isValidUrl(link.icon))
-        ? "https://www.faviconextractor.com/favicon/" + extractDomain(link.url)
-        : link.icon;
       icon.alt = "Website Icon";
+      icon.referrerPolicy = "no-referrer";
+
+      // 多平台 favicon 自动回退（PNG/ICO/SVG 都支持：自定义 icon 优先）
+      const iconCandidates = getIconCandidates(link);
+
+      // 记住用户“手动切换到的来源”（localStorage，不改数据结构）
+      const prefIdx = readIconChoice(link);
+      const startIdx = (prefIdx !== null && prefIdx >= 0 && prefIdx < iconCandidates.length) ? prefIdx : 0;
+
+      if(iconCandidates.length){
+        icon.dataset.iconIndex = String(startIdx);
+        icon.src = iconCandidates[startIdx];
+      }else{
+        // 没有任何候选时，直接使用默认图标
+        const svgBlob = new Blob([defaultIconSVG], { type:"image/svg+xml" });
+        const svgUrl = URL.createObjectURL(svgBlob);
+        icon.src = svgUrl;
+        icon.onload = function(){ URL.revokeObjectURL(svgUrl); };
+      }
+
       icon.onerror = function(){
+        const idx = parseInt(this.dataset.iconIndex || "0", 10);
+        const next = (isNaN(idx) ? 0 : idx) + 1;
+
+        if(iconCandidates && next < iconCandidates.length){
+          this.dataset.iconIndex = String(next);
+          this.src = iconCandidates[next];
+          return;
+        }
+
+        // 全部失败：回退默认 SVG
         const svgBlob = new Blob([defaultIconSVG], { type:"image/svg+xml" });
         const svgUrl = URL.createObjectURL(svgBlob);
         this.src = svgUrl;
         this.onload = function(){ URL.revokeObjectURL(svgUrl); };
       };
+
+      // 一键切换下一个图标来源：点击小图标即可切换（不会打开链接）
+      icon.addEventListener("click", function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(!iconCandidates || !iconCandidates.length) return;
+
+        let idx = parseInt(this.dataset.iconIndex || "0", 10);
+        if(!Number.isFinite(idx)) idx = 0;
+
+        const next = (idx + 1) % iconCandidates.length;
+        this.dataset.iconIndex = String(next);
+        this.src = iconCandidates[next];
+        writeIconChoice(link, next);
+      });
 
       const title = document.createElement("div");
       title.className = "card-title";
@@ -2001,20 +2080,10 @@ body.logged-in .admin-panel-hint{ display:inline-block; }
       cardActions.appendChild(deleteBtn);
       card.appendChild(cardActions);
 
-
-// Hover tooltip: smoother & more responsive
-const __tipText = link.tips || "";
-const __onTipMove = function(e){ handleTooltipMouseMove(e, __tipText, isAdmin); };
-if(window.PointerEvent){
-  card.addEventListener("pointerenter", __onTipMove);
-  card.addEventListener("pointermove", __onTipMove);
-  card.addEventListener("pointerleave", handleTooltipMouseLeave);
-}else{
-  card.addEventListener("mouseenter", __onTipMove);
-  card.addEventListener("mousemove", __onTipMove);
-  card.addEventListener("mouseleave", handleTooltipMouseLeave);
-}
-
+      // Hover tooltip: show full bookmark description (link.tips)
+      card.addEventListener("mouseenter", function(e){ handleTooltipMouseMove(e, link.tips, isAdmin); });
+      card.addEventListener("mousemove", function(e){ handleTooltipMouseMove(e, link.tips, isAdmin); });
+      card.addEventListener("mouseleave", handleTooltipMouseLeave);
 
       card.addEventListener("dragstart", dragStart);
       card.addEventListener("dragover", dragOver);
@@ -2531,26 +2600,13 @@ if(window.PointerEvent){
     function updateLoginButton(){
       const loginBtn = document.getElementById("login-btn");
       const adminBtn = document.getElementById("admin-btn");
-
-      // 右侧后台拉出按钮 & 提示（仅登录后显示）
-      const handle = document.querySelector(".admin-panel-handle");
-      const hint = document.querySelector(".admin-panel-hint");
-
       if(isLoggedIn){
         loginBtn.textContent = "退出登录";
         adminBtn.style.display = "inline-block";
         adminBtn.textContent = isAdmin ? "离开设置" : "设置①";
-
-        document.body.classList.add("logged-in");
-        if(handle) handle.style.display = "block";
-        if(hint) hint.style.display = "inline-block";
       }else{
         loginBtn.textContent = "登录";
         adminBtn.style.display = "none";
-
-        document.body.classList.remove("logged-in");
-        if(handle) handle.style.display = "none";
-        if(hint) hint.style.display = "none";
       }
     }
 
@@ -2634,76 +2690,43 @@ if(window.PointerEvent){
     }
     window.addEventListener("scroll", handleBackToTopVisibility);
 
-    
-/* ================= Tooltip（卡片tips） ================= */
-let __tooltipRAF = 0;
-const __tooltipState = { x: 0, y: 0, tips: "", adminMode: false };
+    /* ================= Tooltip（卡片tips） ================= */
+    function handleTooltipMouseMove(e, tips, adminMode){
+      const tooltip = document.getElementById("custom-tooltip");
+      if(!tooltip) return;
 
-function __renderTooltip(){
-  __tooltipRAF = 0;
-  const tooltip = document.getElementById("custom-tooltip");
-  if(!tooltip) return;
+      if(!tips || adminMode){
+        tooltip.style.display = "none";
+        return;
+      }
 
-  const tips = __tooltipState.tips;
-  const adminMode = __tooltipState.adminMode;
+      if(tooltip.textContent !== tips) tooltip.textContent = tips;
+      tooltip.style.display = "block";
 
-  if(!tips || adminMode){
-    tooltip.style.display = "none";
-    return;
-  }
+      const offsetX = 15, offsetY = 10;
 
-  if(tooltip.textContent !== tips) tooltip.textContent = tips;
-  if(tooltip.style.display !== "block") tooltip.style.display = "block";
+      // Use viewport coordinates so it works reliably with fixed headers / scrolling.
+      const rect = tooltip.getBoundingClientRect();
+      const pageWidth = window.innerWidth;
+      const pageHeight = window.innerHeight;
 
-  const offsetX = 14, offsetY = 10;
-  const x = __tooltipState.x;
-  const y = __tooltipState.y;
+      const cx = (typeof e.clientX === "number") ? e.clientX : 0;
+      const cy = (typeof e.clientY === "number") ? e.clientY : 0;
 
-  // Use transform for smoother updates (less layout thrash than left/top).
-  const w = tooltip.offsetWidth || 0;
-  const h = tooltip.offsetHeight || 0;
+      let left = cx + offsetX;
+      let top = cy + offsetY;
 
-  let left = x + offsetX;
-  let top = y + offsetY;
+      // Keep tooltip within viewport
+      if(pageWidth - cx < 200) left = cx - rect.width - offsetX;
+      if(pageHeight - cy < 100) top = cy - rect.height - offsetY;
 
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-
-  // Keep tooltip within viewport with a small padding
-  const pad = 8;
-  if(left + w + pad > vw) left = x - w - offsetX;
-  if(top + h + pad > vh) top = y - h - offsetY;
-
-  // Clamp
-  if(left < pad) left = pad;
-  if(top < pad) top = pad;
-
-  tooltip.style.transform = "translate3d(" + left + "px," + top + "px,0)";
-}
-
-function handleTooltipMouseMove(e, tips, adminMode){
-  const tooltip = document.getElementById("custom-tooltip");
-  if(!tooltip) return;
-
-  __tooltipState.tips = tips || "";
-  __tooltipState.adminMode = !!adminMode;
-
-  // clientX/Y works with fixed positioning & scrolling.
-  __tooltipState.x = (typeof e.clientX === "number") ? e.clientX : 0;
-  __tooltipState.y = (typeof e.clientY === "number") ? e.clientY : 0;
-
-  if(__tooltipRAF) return;
-  __tooltipRAF = requestAnimationFrame(__renderTooltip);
-}
-
-function handleTooltipMouseLeave(){
-  __tooltipState.tips = "";
-  __tooltipState.adminMode = false;
-
-  const tooltip = document.getElementById("custom-tooltip");
-  if(tooltip) tooltip.style.display = "none";
-}
-
+      tooltip.style.left = left + "px";
+      tooltip.style.top = top + "px";
+    }
+    function handleTooltipMouseLeave(){
+      const tooltip = document.getElementById("custom-tooltip");
+      if(tooltip) tooltip.style.display = "none";
+    }
 
     /* ================= 书签搜索 ================= */
     function searchBookmarks(query){
@@ -3219,7 +3242,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </script>
 
-<div class="admin-panel-handle" onclick="openAdminPanel()" title="后台操作" style="display:none;"></div>
+<div class="admin-panel-handle" onclick="openAdminPanel()" title="后台操作"></div>
 
 
 <script>
